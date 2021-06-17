@@ -1,0 +1,4 @@
+(library
+ (name bfcomp)
+ (preprocess (pps lwt_ppx ppx_deriving.show))
+ (libraries unix lwt lwt.unix))

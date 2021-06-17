@@ -1,0 +1,4 @@
+(executable
+ (public_name bfcomp)
+ (name main)
+ (libraries bfcomp unix))
