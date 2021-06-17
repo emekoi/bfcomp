@@ -42,7 +42,6 @@ module Pass = struct
         | JumpIfZero _ -> Stack.push i stack
         | JumpIfNotZero _ ->
             let idx = Stack.pop stack in
-            print_endline (string_of_int i);
             array.(idx) <- JumpIfZero i;
             array.(i) <- JumpIfNotZero idx
         | _ -> ())

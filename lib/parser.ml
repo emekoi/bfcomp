@@ -16,5 +16,4 @@ let parse_fn l = function
 
 let parse s =
   let stream = Stream.of_string s in
-  (* use List.rev_map *)
   stream_fold parse_fn [] stream |> List.rev
