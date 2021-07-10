@@ -10,46 +10,32 @@ type t =
 module Pass = struct
   let finalize l = List.rev l
 
-  let zero_loop input =
-    let f code instr =
-      match instr with Loop [ Cell _ ] -> Set 0 :: code | _ -> instr :: code
-    in
-    List.fold_left f [] input
+  let zero_loop code = function
+    | Loop [ Cell _ ] -> Set 0 :: code
+    | instr -> instr :: code
 
-  let dead_code input =
-    let f code instr =
-      match code with
-      | Loop _ :: _ -> (
-          match instr with
-          | Loop _ ->
-              let () = print_endline "deleting code" in
-              code
-          | loop -> loop :: code)
-      | _ -> instr :: code
-    in
-    List.fold_left f [] input
+  let dead_code code instr =
+    match code with
+    | Loop _ :: _ -> ( match instr with Loop _ -> code | _ -> instr :: code)
+    | _ -> instr :: code
 
-  let contraction =
-    let contract code instr =
-      match code with
-      | [] -> [ instr ]
-      | head :: tail as l -> (
-          match (instr, head) with
-          | Tape a, Tape b -> Tape (a + b) :: tail
-          | Cell a, Cell b -> Cell (a + b) :: tail
-          | _ -> instr :: l)
-    in
-
-    let rec f code = function
-      | Loop body -> Loop (g body |> List.rev) :: code
-      | i -> contract code i
-    and g code = List.fold_left f [] code in
-    g
+  let contraction code instr =
+    match code with
+    | [] -> [ instr ]
+    | head :: tail as l -> (
+        match (instr, head) with
+        | Tape a, Tape b -> Tape (a + b) :: tail
+        | Cell a, Cell b -> Cell (a + b) :: tail
+        | _ -> instr :: l)
 
   let run passes code =
     (* let f = function Loop body -> Loop (run passes body) | i -> i in *)
-    let f = Fun.id in
-    let run_passes code pass = List.map f code |> pass in
+    let rec f pass code = function
+      | Loop body -> pass code (Loop (g pass body |> List.rev))
+      | i -> pass code i
+    and g pass code = List.fold_left (f pass) [] code in
+
+    let run_passes code pass = g pass code in
     let out = List.fold_left run_passes code passes in
     finalize out
 end
