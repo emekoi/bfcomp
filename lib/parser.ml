@@ -1,19 +1,32 @@
-let stream_fold f a s =
-  let state = ref a in
-  Stream.iter (fun x -> state := f !state x) s;
-  !state
+type 't parsed = More of 't | Skip | End
 
-let parse_fn l = function
-  | '+' -> Ir.CellInc 1 :: l
-  | '-' -> Ir.CellDec 1 :: l
-  | '>' -> Ir.TapeInc 1 :: l
-  | '<' -> Ir.TapeDec 1 :: l
-  | ',' -> Ir.Read :: l
-  | '.' -> Ir.Write :: l
-  | '[' -> Ir.JumpIfZero (-1) :: l
-  | ']' -> Ir.JumpIfNotZero (-1) :: l
-  | _ -> l
+let rec parse_char s = function
+  | '+' -> More (Ir.Cell 1)
+  | '-' -> More (Ir.Cell (-1))
+  | '>' -> More (Ir.Tape 1)
+  | '<' -> More (Ir.Tape (-1))
+  | ',' -> More Ir.Read
+  | '.' -> More Ir.Write
+  (* is this reversing step expensive over time? *)
+  | '[' -> More (Ir.Loop (parse_stream s |> List.rev))
+  | ']' -> End
+  | _ -> Skip
 
-let parse s =
-  let stream = Stream.of_string s in
-  stream_fold parse_fn [] stream |> List.rev
+and parse_stream s =
+  let acc = ref [] in
+  let rec do_rec () =
+    match Stream.peek s with
+    | Some c -> (
+        Stream.junk s;
+        match parse_char s c with
+        | More acc' ->
+            acc := acc' :: !acc;
+            do_rec ()
+        | Skip -> do_rec ()
+        | End -> ())
+    | None -> ()
+  in
+  do_rec ();
+  !acc
+
+let parse s = Stream.of_string s |> parse_stream |> List.rev

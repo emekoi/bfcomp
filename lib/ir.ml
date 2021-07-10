@@ -1,52 +1,55 @@
 type t =
-  | (* > *) TapeInc of int
-  | (* < *) TapeDec of int
-  | (* + *) CellInc of int
-  | (* - *) CellDec of int
+  | (* > | < *) Tape of int
+  | (* + | - *) Cell of int
   | (* , *) Read
   | (* . *) Write
-  | (* [ *) JumpIfZero of int
-  | (* ] *) JumpIfNotZero of int
+  | Set of int
+  | Loop of t list
 [@@deriving show]
 
 module Pass = struct
+  let finalize l = List.rev l
+
+  let zero_loop input =
+    let f code instr =
+      match instr with Loop [ Cell _ ] -> Set 0 :: code | _ -> instr :: code
+    in
+    List.fold_left f [] input
+
+  let dead_code input =
+    let f code instr =
+      match code with
+      | Loop _ :: _ -> (
+          match instr with
+          | Loop _ ->
+              let () = print_endline "deleting code" in
+              code
+          | loop -> loop :: code)
+      | _ -> instr :: code
+    in
+    List.fold_left f [] input
+
   let contraction =
-    let g = function
-      | TapeInc a as b -> if a < 0 then TapeDec (-a) else b
-      | CellInc a as b -> if a < 0 then CellDec (-a) else b
-      | i -> i
-      (* | TapeDec a as b -> if a < 0 then TapeInc (-a) else b *)
-      (* | CellDec a as b -> if a < 0 then CellDec (-a) else b *)
+    let contract code instr =
+      match code with
+      | [] -> [ instr ]
+      | head :: tail as l -> (
+          match (instr, head) with
+          | Tape a, Tape b -> Tape (a + b) :: tail
+          | Cell a, Cell b -> Cell (a + b) :: tail
+          | _ -> instr :: l)
     in
-    let f x = function
-      | [] -> [ x ]
-      | x' :: t as l -> (
-          match (x, x') with
-          | TapeDec a, TapeDec b -> TapeDec (a + b) :: t
-          | TapeInc a, TapeInc b -> TapeInc (a + b) :: t
-          | CellDec a, CellDec b -> CellDec (a + b) :: t
-          | CellInc a, CellInc b -> CellInc (a + b) :: t
-          | CellInc a, CellDec b | CellDec b, CellInc a ->
-              g (CellInc (a - b)) :: t
-          | TapeInc a, TapeDec b | TapeDec b, TapeInc a ->
-              g (TapeInc (a - b)) :: t
-          | _ -> x :: l)
-    in
-    List.fold_left (Fun.flip f) []
 
-  let finalize l =
-    let stack = Stack.create () in
-    let array = List.rev l |> Array.of_list in
-    Array.iteri
-      (fun i -> function
-        | JumpIfZero _ -> Stack.push i stack
-        | JumpIfNotZero _ ->
-            let idx = Stack.pop stack in
-            array.(idx) <- JumpIfZero i;
-            array.(i) <- JumpIfNotZero idx
-        | _ -> ())
-      array;
-    Array.to_list array
+    let rec f code = function
+      | Loop body -> Loop (g body |> List.rev) :: code
+      | i -> contract code i
+    and g code = List.fold_left f [] code in
+    g
 
-  let run passes l = List.fold_left (fun l p -> p l) l passes |> finalize
+  let run passes code =
+    (* let f = function Loop body -> Loop (run passes body) | i -> i in *)
+    let f = Fun.id in
+    let run_passes code pass = List.map f code |> pass in
+    let out = List.fold_left run_passes code passes in
+    finalize out
 end
