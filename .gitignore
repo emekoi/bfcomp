@@ -1,4 +1,5 @@
 .secrets/
+scratch/
 _build
 _opam
 .merlin

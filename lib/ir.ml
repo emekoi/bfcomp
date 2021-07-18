@@ -6,6 +6,7 @@ type t =
   | Set of int
   | Loop of t list
 [@@deriving show]
+(* add Scan which will read in a word and check if it is non-zero *)
 
 module Pass = struct
   let finalize l = List.rev l
