@@ -1,0 +1,26 @@
+opam-version: "2.0"
+authors: "Emeka Nkurumeh"
+maintainer: "emekankurumeh@outlook.com"
+homepage: "https://github.com/emekoi/malk"
+dev-repo: "git+https://github.com/emekoi/malk.git"
+bug-reports: "https://github.com/emekoi/malk/issues/"
+doc: "https://emekoi.github.io/malk/"
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+]
+depends: [
+  "ocaml"
+  "dune"
+#   "ppxlib" {build}
+#   "ppx_tools" {build}
+  "ppx_deriving" {build}
+  "stdint"
+#   "extlib" {build}
+#   "stringext" {build}
+#   "lwt" {build}
+  # "ppx_serf" {build}
+]
+synopsis: "Build API clients from type definitions"
+description:
+  "ppx_serf allows you build API clients from type definitions."
