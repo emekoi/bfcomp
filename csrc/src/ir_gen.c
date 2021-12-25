@@ -1,37 +1,14 @@
 #include "ir_gen.h"
+#include "rxi/vec.h"
 #include <string.h>
 
-ir_ctx *ir_ctx_new(uint64_t cap) {
-  ir_ctx *result = calloc(1, sizeof(ir_ctx) + cap * sizeof(ir_op_t));
-  if (result) {
-    result->patch = NULL;
-    result->cap = cap;
-    result->len = 0;
+void ir_ctx_free(ir_ctx ctx) {
+  while (ctx.patch) {
+    ir_patch_t *prev = ctx.patch->prev;
+    free(ctx.patch);
+    ctx.patch = prev;
   }
-  return result;
-}
-
-void ir_ctx_free(ir_ctx *ctx) {
-  if (!ctx)
-    return;
-  while (ctx->patch) {
-    ir_patch_t *prev = ctx->patch->prev;
-    free(ctx->patch);
-    ctx->patch = prev;
-  }
-  free(ctx);
-}
-
-ir_ctx *ir_ctx_grow(ir_ctx *ctx) {
-  ir_ctx *result = calloc(1, sizeof(ir_ctx) + ctx->cap * 2 * sizeof(ir_op_t));
-  if (result) {
-    result->cap = ctx->cap * 2;
-    result->len = ctx->len;
-    result->patch = ctx->patch;
-    memcpy(result->ptr, ctx->ptr, ctx->cap * sizeof(ir_op_t));
-    free(ctx);
-  }
-  return result;
+  vec_deinit(&ctx);
 }
 
 static uint64_t count_char(const char *src, char c) {
@@ -41,18 +18,14 @@ static uint64_t count_char(const char *src, char c) {
   return (uint64_t)(ptr - src);
 }
 
-size_t ir_ctx_parse(ir_ctx **ctx_ptr, const char *src) {
+size_t ir_ctx_parse(ir_ctx *ctx, const char *src) {
   const char *ptr = src;
-  ir_ctx *ctx = *ctx_ptr;
-  while (*ptr) {
-    if (ir_ctx_full(ctx)) {
-      ctx = ir_ctx_grow(ctx);
-      *ctx_ptr = ctx;
-    }
-    uint64_t count = count_char(ptr, *ptr);
+  /* } is not significant in macros so we need to wrap struct literals */
 #define push_op(op, v)                                                         \
-  ir_ctx_push(ctx) = (ir_op_t){.kind = op, .arg = v};                          \
+  vec_push(ctx, ((ir_op_t){op, v}));                                           \
   break
+  while (*ptr) {
+    uint64_t count = count_char(ptr, *ptr);
     switch (*ptr) {
     case ',':
       push_op(IR_OP_READ, count);
@@ -69,18 +42,18 @@ size_t ir_ctx_parse(ir_ctx **ctx_ptr, const char *src) {
 #undef push_op
     case '[': {
       ir_patch_t *next = calloc(1, sizeof(ir_patch_t));
-      *next = (ir_patch_t){.addr = ctx->len, .prev = ctx->patch};
+      *next = (ir_patch_t){.addr = ctx->length, .prev = ctx->patch};
       ctx->patch = next;
-      ir_ctx_push(ctx) = (ir_op_t){.kind = IR_OP_PATCH, .arg = 0};
+      vec_push(ctx, ((ir_op_t){.kind = IR_OP_PATCH, .arg = 0}));
       ptr++;
       continue;
     }
     case ']': {
       if (ctx->patch) {
-        ir_ctx_idx(ctx, ctx->patch->addr) =
-            (ir_op_t){.kind = (ir_op_kind_t)LOOP_START, .arg = ctx->len};
-        ir_ctx_push(ctx) =
-            (ir_op_t){.kind = (ir_op_kind_t)LOOP_END, .arg = ctx->patch->addr};
+        ctx->data[ctx->patch->addr] =
+            (ir_op_t){.kind = (ir_op_kind_t)LOOP_START, .arg = ctx->length};
+        vec_push(ctx, ((ir_op_t){.kind = (ir_op_kind_t)LOOP_END,
+                                 .arg = ctx->patch->addr}));
         ir_patch_t *tmp = ctx->patch->prev;
         free(ctx->patch);
         ctx->patch = tmp;
@@ -102,8 +75,8 @@ size_t ir_ctx_parse(ir_ctx **ctx_ptr, const char *src) {
   putchar(c)
 
 void ir_ctx_dump_bf(ir_ctx *ctx) {
-  for (uint64_t i = 0; i < ctx->len; i++) {
-    ir_op_t opcode = ir_ctx_idx(ctx, i);
+  for (uint64_t i = 0; i < ctx->length; i++) {
+    ir_op_t opcode = ctx->data[i];
     switch (opcode.kind & IR_OP_MAX) {
     case IR_OP_READ:
       putcc(',', opcode.arg);
@@ -180,8 +153,8 @@ const char *ir_fmt_op(ir_op_t opcode, char *buf) {
 
 void ir_ctx_dump_ir(ir_ctx *ctx) {
   char buf[1024] = {0};
-  for (uint64_t i = 0; i < ctx->len; i++) {
-    ir_op_t opcode = ir_ctx_idx(ctx, i);
-    printf("[%ld] %s\n", i, ir_fmt_op(opcode, buf));
+  /* for (uint64_t i = 0; i < ctx->len; i++) { */
+  vec_for(ctx, opcode, i) {
+    printf("[%ld] %s\n", iter.i, ir_fmt_op(iter.opcode, buf));
   }
 }

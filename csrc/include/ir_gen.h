@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rxi/vec.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,25 +35,18 @@ typedef struct ir_patch {
 
 typedef struct {
   ir_patch_t *patch;
-  uint64_t cap;
-  uint64_t len;
-  ir_op_t ptr[];
+  vec_t(ir_op_t);
 } ir_ctx;
 
-/* the index at `ctx->len` is the next empty memory location */
-#define ir_ctx_push(ctx) (ctx)->ptr[(ctx)->len++]
-/* prefix here since we need to first decrement `ctx->len` to
- * get the last occupied slot
- * */
-#define ir_ctx_pop(ctx) (ctx)->ptr[--(ctx)->len]
-#define ir_ctx_idx(ctx, idx) (ctx)->ptr[idx]
-#define ir_ctx_empty(ctx) ((ctx) && (ctx)->len == 0 && (ctx)->cap != 0)
-#define ir_ctx_full(ctx) ((ctx) && (ctx)->len >= (ctx)->cap)
+/* #define ir_ctx_push(ctx) (ctx)->ptr[(ctx)->len++] */
+/* #define ir_ctx_pop(ctx) (ctx)->ptr[--(ctx)->len] */
+/* #define ir_ctx_idx(ctx, idx) (ctx)->ptr[idx] */
+/* #define ir_ctx_empty(ctx) ((ctx) && (ctx)->len == 0 && (ctx)->cap != 0) */
+/* #define ir_ctx_full(ctx) ((ctx) && (ctx)->len >= (ctx)->cap) */
 
-ir_ctx *ir_ctx_new();
-ir_ctx *ir_ctx_grow(ir_ctx *ctx);
-void ir_ctx_free(ir_ctx *ctx);
-size_t ir_ctx_parse(ir_ctx **ctx, const char *src);
+/* ir_ctx *ir_ctx_grow(ir_ctx *ctx); */
+void ir_ctx_free(ir_ctx ctx);
+size_t ir_ctx_parse(ir_ctx *ctx, const char *src);
 void ir_ctx_dump_bf(ir_ctx *ctx);
 void ir_ctx_dump_ir(ir_ctx *ctx);
 

@@ -25,3 +25,7 @@
 
 auto_fn(free);
 auto_fn(fclose);
+
+#ifdef DMT_H
+void auto_dmt_free(void *data) { if (*(void **)data) dmt_free(*(void**)data); }
+#endif

@@ -1,12 +1,10 @@
 #include "ir_interpret.h"
+#include "rxi/vec.h"
 #include <string.h>
 
-size_t ir_ctx_interpret(ir_ctx **ctx, char *mem) {
+size_t ir_ctx_interpret(ir_ctx *ctx, char *mem) {
   /* patch code to have a halt instruction */
-  if (ir_ctx_full(*ctx)) {
-    *ctx = ir_ctx_grow(*ctx);
-  }
-  ir_ctx_push(*ctx) = (ir_op_t){.kind = IR_OP_MAX, .arg = 0};
+  vec_push(ctx, ((ir_op_t){.kind = IR_OP_MAX, .arg = 0}));
   static void *dispatch_table[] = {
       &&ir_op_tape, &&ir_op_cell, &&ir_op_loop,  &&ir_op_write,
       &&ir_op_read, &&ir_op_set,  &&ir_op_patch, &&ir_op_halt,
@@ -14,11 +12,11 @@ size_t ir_ctx_interpret(ir_ctx **ctx, char *mem) {
   size_t ip = 0;
   size_t sp = 0;
   char buf[1024] = {0};
-#define opcode(ir_op_ip) ir_ctx_idx((*ctx), ir_op_ip - 1)
+#define opcode(ir_op_ip) ctx->data[ir_op_ip - 1]
 #define dispatch(label, blk)                                                   \
   label : {                                                                    \
     if (0) {                                                                   \
-      printf("[%ld;%ld] %s\n", ip, sp, ir_fmt_op(opcode(ip), buf));               \
+      printf("[%ld;%ld] %s\n", ip, sp, ir_fmt_op(opcode(ip), buf));            \
     } else {                                                                   \
       unused(buf);                                                             \
     }                                                                          \
