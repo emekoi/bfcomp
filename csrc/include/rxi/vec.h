@@ -79,6 +79,12 @@
     }                                                                          \
   } while (0)
 
+#define vec_push_as_bytes(vec, v) vec_pusharr(vec, (uint8_t *)v, sizeof(v) >> 3)
+
+#define vec_push_str(v, str) vec_pusharr(v, str, strlen(str))
+
+#define vec_push_arr(v, arr) vec_pusharr(v, arr, sizeof(arr))
+
 #define vec_extend(v, v2) vec_pusharr((v), (v2)->data, (v2)->length)
 
 #define vec_find(v, val, idx)                                                  \

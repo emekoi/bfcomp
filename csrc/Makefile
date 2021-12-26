@@ -4,7 +4,7 @@ include_dir=include
 	@test -d $(@D) || mkdir -p $(@D)
 	gcc $< -Wall -Wextra -c -g -o $@ --std=c11 -I$(include_dir)
 
-bin/bfcomp-c: .cache/ir_gen.o .cache/ir_interpret.o .cache/main.o
+bin/bfcomp-c: .cache/impl.o .cache/elf_gen.o .cache/ir_gen.o .cache/ir_interpret.o .cache/main.o
 	@test -d $(@D) || mkdir -p $(@D)
 	gcc -fuse-ld=lld $^ -g -o $@
 

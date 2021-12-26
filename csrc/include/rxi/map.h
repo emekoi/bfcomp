@@ -38,6 +38,7 @@ typedef struct {
 #define map_t(T)                                                               \
   struct {                                                                     \
     map_base_t base;                                                           \
+    uint64_t count;                                                            \
     T *ref;                                                                    \
     T tmp;                                                                     \
   }
@@ -51,16 +52,18 @@ typedef struct {
 #define map_get_ex(m, key, ksize) ((m)->ref = map_get_(&(m)->base, key, ksize))
 
 #define map_set(m, key, value)                                                 \
-  ((m)->tmp = (value),                                                         \
+  ((m)->tmp = (value), (m)->count++,                                           \
    map_set_(&(m)->base, key, strlen(key) + 1, &(m)->tmp, sizeof((m)->tmp)))
 
 #define map_set_ex(m, key, ksize, value)                                       \
-  ((m)->tmp = (value),                                                         \
+  ((m)->tmp = (value), (m)->count++,                                           \
    map_set_(&(m)->base, key, ksize, &(m)->tmp, sizeof((m)->tmp)))
 
-#define map_remove(m, key) map_remove_(&(m)->base, key, strlen(key) + 1)
+#define map_remove(m, key)                                                     \
+  ((m)->count--, map_remove_(&(m)->base, key, strlen(key) + 1))
 
-#define map_remove_ex(m, key, ksize) map_remove_(&(m)->base, key, ksize)
+#define map_remove_ex(m, key, ksize)                                           \
+  ((m)->count--, map_remove_(&(m)->base, key, ksize))
 
 #define map_iter(m) map_iter_()
 

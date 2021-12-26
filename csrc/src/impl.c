@@ -1,0 +1,9 @@
+#define DMT_STACK_TRACE
+#define DMT_IMPL
+#include "rxi/dmt.h"
+#define VEC_IMPL
+#include "rxi/vec.h"
+#define MAP_IMPL
+#include "rxi/map.h"
+#define DEFER_IMPL
+#include "defer.h"

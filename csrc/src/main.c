@@ -1,11 +1,9 @@
 #include "ir_gen.h"
 #include "ir_interpret.h"
-#define DMT_STACK_TRACE
-#define DMT_IMPL
+#include "elf_gen.h"
 #include "rxi/dmt.h"
-#define VEC_IMPL
-#include "defer.h"
 #include "rxi/vec.h"
+#include "defer.h"
 #include <stdio.h>
 
 #define BUFLEN 1024
@@ -13,6 +11,22 @@
 void auto_dmt_free(void *data) {
   if (*(void **)data)
     dmt_free(*(void **)data);
+}
+
+void write_elf_file(const char *file) {
+  FILE defer_var(auto_fclose) *fp = fopen(file, "w");
+  program_map_t segments = {0};
+  program_t *text = gen_prog_header(&segments, ".text", (Elf32_Phdr){
+      .p_type = PT_LOAD,
+      .p_vaddr = 0x08048000,
+      .p_flags = PF_R | PF_X
+  });
+  vec_push_arr(text, ((uint8_t[]){
+      0xb8,0x01,0x00,0x00,0x00,      /*   movl   $1,%eax               */
+      0xbb,0x2a,0x00,0x00,0x00,      /*   movl   $42,%ebx               */
+      0xcd,0x80,                     /*   int    $0x80                 */
+  }));
+  gen_elf_file(fp, &segments);
 }
 
 int main(int argc, const char *argv[]) {
