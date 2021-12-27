@@ -15,8 +15,9 @@ void auto_dmt_free(void *data) {
 
 void write_elf_file(const char *file) {
   FILE defer_var(auto_fclose) *fp = fopen(file, "w");
-  program_map_t segments = {0};
-  program_t *text = gen_prog_header(&segments, ".text", (Elf32_Phdr){
+  elf_gen_ctx elf_ctx = elf_gen_ctx_init();
+
+  program_t *text = gen_program_header(&elf_ctx, ".text", (Elf32_Phdr){
       .p_type = PT_LOAD,
       .p_vaddr = 0x08048000,
       .p_flags = PF_R | PF_X
@@ -26,7 +27,15 @@ void write_elf_file(const char *file) {
       0xbb,0x2a,0x00,0x00,0x00,      /*   movl   $42,%ebx               */
       0xcd,0x80,                     /*   int    $0x80                 */
   }));
-  gen_elf_file(fp, &segments);
+  gen_section_header(&elf_ctx, ".text", (Elf32_Shdr){
+      .sh_type = SHT_PROGBITS,
+      .sh_flags = SHF_ALLOC | SHF_EXECINSTR,
+      .sh_addr = text->header.p_vaddr
+  });
+  elf_ctx.elf_header.e_entry = text->header.p_vaddr;
+
+  gen_elf_file(fp, &elf_ctx);
+  elf_gen_ctx_free(&elf_ctx);
 }
 
 int main(int argc, const char *argv[]) {
