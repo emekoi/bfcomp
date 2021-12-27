@@ -1,14 +1,14 @@
 #include "ir_gen.h"
-#include "rxi/vec.h"
+#include "common.h"
 #include <string.h>
 
-void ir_ctx_free(ir_ctx ctx) {
-  while (ctx.patch) {
-    ir_patch_t *prev = ctx.patch->prev;
-    free(ctx.patch);
-    ctx.patch = prev;
+void ir_ctx_free(ir_ctx *ctx) {
+  while (ctx->patch) {
+    ir_patch_t *prev = ctx->patch->prev;
+    free(ctx->patch);
+    ctx->patch = prev;
   }
-  vec_deinit(&ctx);
+  vec_deinit(ctx);
 }
 
 static uint64_t count_char(const char *src, char c) {

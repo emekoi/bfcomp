@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rxi/vec.h"
+#include "common.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,7 +45,7 @@ typedef struct {
 /* #define ir_ctx_full(ctx) ((ctx) && (ctx)->len >= (ctx)->cap) */
 
 /* ir_ctx *ir_ctx_grow(ir_ctx *ctx); */
-void ir_ctx_free(ir_ctx ctx);
+void ir_ctx_free(ir_ctx *ctx);
 size_t ir_ctx_parse(ir_ctx *ctx, const char *src);
 void ir_ctx_dump_bf(ir_ctx *ctx);
 void ir_ctx_dump_ir(ir_ctx *ctx);

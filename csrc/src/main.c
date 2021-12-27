@@ -1,9 +1,7 @@
 #include "ir_gen.h"
 #include "ir_interpret.h"
 #include "elf_gen.h"
-#include "rxi/dmt.h"
-#include "rxi/vec.h"
-#include "defer.h"
+#include "common.h"
 #include <stdio.h>
 
 #define BUFLEN 1024
@@ -48,10 +46,11 @@ int main(int argc, const char *argv[]) {
     dmt_dump(dmt_file);
     fclose(dmt_file);
   };
+
   char defer_var(auto_dmt_free) *buffer = dmt_calloc(1, BUFLEN + 1);
-  ir_ctx ir_ctx = {0};
+  ir_ctx defer_var(ir_ctx_free) ir_ctx = {0};
   vec_reserve(&ir_ctx, BUFLEN);
-  defer { ir_ctx_free(ir_ctx); };
+
   FILE defer_var(auto_fclose) *fp = fopen(argv[1], "r");
   if (!fp) {
     fprintf(stderr, "unable to open file '%s'\n", argv[1]);
@@ -65,9 +64,13 @@ int main(int argc, const char *argv[]) {
       return 1;
     }
   } while (read_bytes > 0);
-  char defer_var(auto_dmt_free) *mem = dmt_calloc(30e3, sizeof(char));
+
+  interpret_ctx_t interpret_ctx = {0};
+  vec_reserve(&interpret_ctx, 30e3);
+  memset(interpret_ctx.data, 0, interpret_ctx.capacity);
+  defer { vec_deinit(&interpret_ctx); }
   /* ir_ctx_dump_bf(ir_ctx); */
   /* ir_ctx_dump_ir(ir_ctx); */
-  ir_ctx_interpret(&ir_ctx, mem);
+  ir_interpret(&ir_ctx, &interpret_ctx);
   return 0;
 }

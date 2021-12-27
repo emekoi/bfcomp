@@ -1,7 +1,6 @@
 #pragma once
 
-#include "rxi/map.h"
-#include "rxi/vec.h"
+#include "common.h"
 #include <elf.h>
 #include <stdio.h>
 
