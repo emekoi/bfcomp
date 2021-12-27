@@ -30,7 +30,6 @@ int dmt_has(void *ptr);
 #endif
 
 #ifdef DMT_IMPL
-#define _XOPEN_SOURCE 700
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

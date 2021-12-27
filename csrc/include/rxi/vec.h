@@ -23,23 +23,76 @@
 #define VEC_FREE(ptr) free(ptr)
 #endif
 
-#define vec_unpack_(v)                                                         \
-  (uint8_t **)&(v)->data, &(v)->length, &(v)->capacity, sizeof(*(v)->data)
+typedef unsigned int uint_t;
+typedef int int_t;
 
 #define vec_t(T)                                                               \
   struct {                                                                     \
-    uint64_t length, capacity;                                                 \
+    uint8_t borrowed;                                                          \
+    uint_t length, capacity;                                                   \
     T *data;                                                                   \
   }
 
+#define vec_unpack_(v)                                                         \
+  (uint8_t **)&(v)->data, &(v)->length, &(v)->capacity, sizeof(*(v)->data),    \
+      &(v)->borrowed
+
 #define vec_init(v) memset((v), 0, sizeof(*(v)))
 
-#define vec_deinit(v) (VEC_FREE((v)->data), vec_init(v))
+#define vec_borrowed(ptr, len, cap)                                            \
+  { .borrowed = 1, .length = len, .capacity = cap, .data = ptr }
 
-#define vec_push(v, val, ...)                                                  \
+#define vec_owned(ptr, len, cap)                                               \
+  {                                                                            \
+    .borrowed = 0, .length = len, .capacity = cap,                             \
+    .data =                                                                    \
+        memcpy(VEC_ALLOC(NULL, cap * sizeof(*ptr)), ptr, len * sizeof(*ptr))   \
+  }
+
+#define vec_static(static_data)                                                \
+  {                                                                            \
+    .borrowed = 1, .length = sizeof(static_data),                              \
+    .capacity = sizeof(static_data), .data = static_data                       \
+  }
+
+#define vec_borrowed_static(static_data)                                       \
+  {                                                                            \
+    .borrowed = 1, .length = 0, .capacity = sizeof(static_data),               \
+    .data = static_data                                                        \
+  }
+
+#define vec_alloca(T, len)                                                     \
+  {                                                                            \
+    .borrowed = 1, .length = 0, .capacity = len,                               \
+    .data = alloca(sizeof(T) * len)                                            \
+  }
+
+#define vec_deinit(v)                                                          \
+  ((v)->borrowed ? (void)(v) : VEC_FREE((v)->data), vec_init(v))
+
+#define vec_copy(v)                                                            \
+  {                                                                            \
+    .borrowed = 0, .length = (v)->length, .capacity = (v)->capacity,           \
+    .data = memcpy(VEC_ALLOC(NULL, (v)->capacity * sizeof(*(v)->data)),        \
+                   (v)->data, (v)->length * sizeof(*(v)->data))                \
+  }
+
+#define vec_slice(v, start, end)                                               \
+  {                                                                            \
+    .borrowed = 1, .length = end - start, .capacity = end - start,             \
+    .data = (end - start) <= (v)->capacity ? (v)->data + start : NULL          \
+  }
+
+#define vec_push(v, val)                                                       \
   (vec_expand_(vec_unpack_(v)) ? -1 : ((v)->data[(v)->length++] = (val), 0))
 
 #define vec_pop(v) (v)->data[--(v)->length]
+
+#define vec_fill(v, n, val)                                                    \
+  do {                                                                         \
+    for (uint_t i = 0; i < n; i++)                                             \
+      vec_push(v, val);                                                        \
+  } while (0)
 
 #define vec_splice(v, start, count)                                            \
   (vec_splice_(vec_unpack_(v), start, count), (v)->length -= (count))
@@ -47,7 +100,7 @@
 #define vec_swapsplice(v, start, count)                                        \
   (vec_swapsplice_(vec_unpack_(v), start, count), (v)->length -= (count))
 
-#define vec_insert(v, idx, val, ...)                                           \
+#define vec_insert(v, idx, val)                                                \
   (vec_insert_(vec_unpack_(v), idx)                                            \
        ? -1                                                                    \
        : ((v)->data[idx] = (val), (v)->length++, 0))
@@ -71,10 +124,9 @@
 
 #define vec_pusharr(v, arr, count)                                             \
   do {                                                                         \
-    int i__, n__ = (count);                                                    \
-    if (vec_reserve_po2_(vec_unpack_(v), (v)->length + n__) != 0)              \
+    if (vec_reserve_po2_(vec_unpack_(v), (v)->length + (count)) != 0)          \
       break;                                                                   \
-    for (i__ = 0; i__ < n__; i__++) {                                          \
+    for (uint_t i__ = 0; i__ < (count); i__++) {                               \
       (v)->data[(v)->length++] = (arr)[i__];                                   \
     }                                                                          \
   } while (0)
@@ -89,25 +141,26 @@
 
 #define vec_find(v, val, idx)                                                  \
   do {                                                                         \
-    for ((idx) = 0; (idx) < (v)->length; (idx)++) {                            \
-      if ((v)->data[(idx)] == (val))                                           \
+    for (*(idx) = 0; (uint_t)(*(idx)) < (v)->length; (*(idx))++) {             \
+      if ((v)->data[*(idx)] == (val))                                          \
         break;                                                                 \
     }                                                                          \
-    if ((idx) == (v)->length)                                                  \
-      (idx) = -1;                                                              \
+    if ((uint_t)(*(idx)) == (v)->length)                                       \
+      *(idx) = -1;                                                             \
   } while (0)
 
 #define vec_bsearch(v, key, idx, fn)                                           \
   do {                                                                         \
     void *ptr =                                                                \
         bsearch((key), (v)->data, (v)->length, sizeof(*(v)->data), fn);        \
-    (idx) = ptr ? (ptr - (void *)(v)->data) / sizeof(*(v)->data) : -1;         \
+    *(idx) =                                                                   \
+        ptr ? (int_t)((ptr - (void *)(v)->data) / sizeof(*(v)->data)) : -1;    \
   } while (0)
 
 #define vec_remove(v, val)                                                     \
   do {                                                                         \
-    int idx__;                                                                 \
-    vec_find(v, val, idx__);                                                   \
+    int_t idx__;                                                               \
+    vec_find(v, val, &idx__);                                                  \
     if (idx__ != -1)                                                           \
       vec_splice(v, idx__, 1);                                                 \
   } while (0)
@@ -123,115 +176,125 @@
 #define vec_for(v, var, i)                                                     \
   if ((v)->length > 0)                                                         \
     for (struct {                                                              \
-           uint64_t i;                                                         \
+           uint_t i;                                                           \
            __typeof__((v)->data[0]) var;                                       \
-         } iter = {0, {0}};                                                    \
+         } iter = {0, (__typeof__((v)->data[0])){0}};                          \
          iter.i < (v)->length && ((iter.var = (v)->data[iter.i]), 1);          \
          ++iter.i)
 
 #define vec_for_ptr(v, var, i)                                                 \
   if ((v)->length > 0)                                                         \
     for (struct {                                                              \
-           uint64_t i;                                                         \
-           __typeof__((v)->data[0]) var;                                       \
-         } iter = {0, {0}};                                                    \
+           uint_t i;                                                           \
+           __typeof__((v)->data[0]) *var;                                      \
+         } iter = {0, NULL};                                                   \
          iter.i < (v)->length && ((iter.var = &(v)->data[iter.i]), 1);         \
          ++iter.i)
 
 #define vec_for_rev(v, var, i)                                                 \
   if ((v)->length > 0)                                                         \
     for (struct {                                                              \
-           uint64_t i;                                                         \
+           uint_t i;                                                           \
            __typeof__((v)->data[0]) var;                                       \
-         } iter = {(v)->length - 1, {0}};                                      \
-         iter.i >= 0 && ((iter.var = (v)->data[iter.i]), 1); --iter.i)
+         } iter = {(v)->length, (__typeof__((v)->data[0])){0}};                \
+         iter.i > 0 && ((iter.var = (v)->data[iter.i - 1]), 1); --iter.i)
 
 #define vec_for_rev_ptr(v, var, i)                                             \
   if ((v)->length > 0)                                                         \
     for (struct {                                                              \
-           uint64_t i;                                                         \
-           __typeof__((v)->data[0]) var;                                       \
-         } iter = {(v)->length - 1, {0}};                                      \
-         iter.i >= 0 && ((iter.var = &(v)->data[iter.i]), 1); --iter.i)
+           uint_t i;                                                           \
+           __typeof__((v)->data[0]) *var;                                      \
+         } iter = {(v)->length, NULL};                                         \
+         iter.i > 0 && ((iter.var = &(v)->data[iter.i - 1]), 1); --iter.i)
 
-uint64_t vec_expand_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                     uint64_t memsz);
-uint64_t vec_reserve_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                      uint64_t memsz, uint64_t n);
-uint64_t vec_reserve_po2_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                          uint64_t memsz, uint64_t n);
-uint64_t vec_compact_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                      uint64_t memsz);
-uint64_t vec_insert_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                     uint64_t memsz, uint64_t idx);
-void vec_splice_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                 uint64_t memsz, uint64_t start, uint64_t count);
-void vec_swapsplice_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                     uint64_t memsz, uint64_t start, uint64_t count);
-void vec_swap_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-               uint64_t memsz, uint64_t idx1, uint64_t idx2);
+uint_t vec_expand_(uint8_t **data, uint_t *length, uint_t *capacity,
+                   uint_t memsz, uint8_t *borrowed);
+uint_t vec_reserve_(uint8_t **data, uint_t *length, uint_t *capacity,
+                    uint_t memsz, uint8_t *borrowed, uint_t n);
+uint_t vec_reserve_po2_(uint8_t **data, uint_t *length, uint_t *capacity,
+                        uint_t memsz, uint8_t *borrowed, uint_t n);
+uint_t vec_compact_(uint8_t **data, uint_t *length, uint_t *capacity,
+                    uint_t memsz, uint8_t *borrowed);
+uint_t vec_insert_(uint8_t **data, uint_t *length, uint_t *capacity,
+                   uint_t memsz, uint8_t *borrowed, uint_t idx);
+void vec_splice_(uint8_t **data, uint_t *length, uint_t *capacity, uint_t memsz,
+                 uint8_t *borrowed, uint_t start, uint_t count);
+void vec_swapsplice_(uint8_t **data, uint_t *length, uint_t *capacity,
+                     uint_t memsz, uint8_t *borrowed, uint_t start,
+                     uint_t count);
+void vec_swap_(uint8_t **data, uint_t *length, uint_t *capacity, uint_t memsz,
+               uint8_t *borrowed, uint_t idx1, uint_t idx2);
 #endif
 
 #ifdef VEC_IMPL
-uint64_t vec_expand_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                     uint64_t memsz) {
+#include <string.h>
+
+uint_t vec_expand_(uint8_t **data, uint_t *length, uint_t *capacity,
+                   uint_t memsz, uint8_t *borrowed) {
   if (*length + 1 > *capacity) {
-    void *ptr;
-    uint64_t n = (*capacity == 0) ? 1 : *capacity << 1;
-    ptr = VEC_ALLOC(*data, n * memsz);
+    uint_t n = (*capacity == 0) ? 1 : *capacity << 1;
+    void *ptr = VEC_ALLOC(*borrowed ? NULL : *data, n * memsz);
     if (ptr == NULL)
       return -1;
+    if (*borrowed)
+      memcpy(ptr, *data, *length);
     *data = ptr;
     *capacity = n;
+    *borrowed = 0;
   }
   return 0;
 }
 
-uint64_t vec_reserve_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                      uint64_t memsz, uint64_t n) {
+uint_t vec_reserve_(uint8_t **data, uint_t *length, uint_t *capacity,
+                    uint_t memsz, uint8_t *borrowed, uint_t n) {
   (void)length;
   if (n > *capacity) {
-    void *ptr = VEC_ALLOC(*data, n * memsz);
+    void *ptr = VEC_ALLOC(*borrowed ? NULL : *data, n * memsz);
     if (ptr == NULL)
       return -1;
+    if (*borrowed)
+      memcpy(ptr, *data, *length);
     *data = ptr;
     *capacity = n;
+    *borrowed = 0;
   }
   return 0;
 }
 
-uint64_t vec_reserve_po2_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                          uint64_t memsz, uint64_t n) {
-  uint64_t n2 = 1;
+uint_t vec_reserve_po2_(uint8_t **data, uint_t *length, uint_t *capacity,
+                        uint_t memsz, uint8_t *borrowed, uint_t n) {
+  uint_t n2 = 1;
   if (n == 0)
     return 0;
   while (n2 < n)
     n2 <<= 1;
-  return vec_reserve_(data, length, capacity, memsz, n2);
+  return vec_reserve_(data, length, capacity, memsz, borrowed, n2);
 }
 
-uint64_t vec_compact_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                      uint64_t memsz) {
+uint_t vec_compact_(uint8_t **data, uint_t *length, uint_t *capacity,
+                    uint_t memsz, uint8_t *borrowed) {
   if (*length == 0) {
     VEC_FREE(*data);
-    *data = NULL;
+    if (!*borrowed)
+      *data = NULL;
     *capacity = 0;
     return 0;
   } else {
-    void *ptr;
-    uint64_t n = *length;
-    ptr = VEC_ALLOC(*data, n * memsz);
-    if (ptr == NULL)
-      return -1;
+    uint_t n = *length;
+    if (!*borrowed) {
+      void *ptr = VEC_ALLOC(*data, n * memsz);
+      if (ptr == NULL)
+        return -1;
+      *data = ptr;
+    }
     *capacity = n;
-    *data = ptr;
   }
   return 0;
 }
 
-uint64_t vec_insert_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                     uint64_t memsz, uint64_t idx) {
-  uint64_t err = vec_expand_(data, length, capacity, memsz);
+uint_t vec_insert_(uint8_t **data, uint_t *length, uint_t *capacity,
+                   uint_t memsz, uint8_t *borrowed, uint_t idx) {
+  uint_t err = vec_expand_(data, length, capacity, memsz, borrowed);
   if (err)
     return err;
   memmove(*data + (idx + 1) * memsz, *data + idx * memsz,
@@ -239,31 +302,35 @@ uint64_t vec_insert_(uint8_t **data, uint64_t *length, uint64_t *capacity,
   return 0;
 }
 
-void vec_splice_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                 uint64_t memsz, uint64_t start, uint64_t count) {
+void vec_splice_(uint8_t **data, uint_t *length, uint_t *capacity, uint_t memsz,
+                 uint8_t *borrowed, uint_t start, uint_t count) {
   (void)capacity;
+  (void)borrowed;
   memmove(*data + start * memsz, *data + (start + count) * memsz,
           (*length - start - count) * memsz);
 }
 
-void vec_swapsplice_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-                     uint64_t memsz, uint64_t start, uint64_t count) {
+void vec_swapsplice_(uint8_t **data, uint_t *length, uint_t *capacity,
+                     uint_t memsz, uint8_t *borrowed, uint_t start,
+                     uint_t count) {
   (void)capacity;
+  (void)borrowed;
   memmove(*data + start * memsz, *data + (*length - count) * memsz,
           count * memsz);
 }
 
-void vec_swap_(uint8_t **data, uint64_t *length, uint64_t *capacity,
-               uint64_t memsz, uint64_t idx1, uint64_t idx2) {
-  uint8_t *a, *b, tmp;
-  uint64_t count;
+void vec_swap_(uint8_t **data, uint_t *length, uint_t *capacity, uint_t memsz,
+               uint8_t *borrowed, uint_t idx1, uint_t idx2) {
+  uint_t count;
   (void)length;
   (void)capacity;
+  (void)borrowed;
   if (idx1 == idx2)
     return;
-  a = (uint8_t *)*data + idx1 * memsz;
-  b = (uint8_t *)*data + idx2 * memsz;
+  uint8_t *a = (uint8_t *)*data + idx1 * memsz;
+  uint8_t *b = (uint8_t *)*data + idx2 * memsz;
   count = memsz;
+  uint8_t tmp;
   while (count--) {
     tmp = *a;
     *a = *b;

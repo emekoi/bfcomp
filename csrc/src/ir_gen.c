@@ -155,6 +155,6 @@ void ir_ctx_dump_ir(ir_ctx *ctx) {
   char buf[1024] = {0};
   /* for (uint64_t i = 0; i < ctx->len; i++) { */
   vec_for(ctx, opcode, i) {
-    printf("[%ld] %s\n", iter.i, ir_fmt_op(iter.opcode, buf));
+    printf("[%d] %s\n", iter.i, ir_fmt_op(iter.opcode, buf));
   }
 }

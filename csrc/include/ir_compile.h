@@ -6,6 +6,6 @@
 
 typedef struct {
   vec_t(uint8_t);
-} ir_compile_buf;
+} compile_ctx;
 
-size_t ir_ctx_compile(ir_ctx *ctx, char *mem);
+size_t ir_ctx_compile(ir_ctx *ir_ctx, compile_ctx *ctx);
