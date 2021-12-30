@@ -131,7 +131,7 @@ typedef int int_t;
     }                                                                          \
   } while (0)
 
-#define vec_push_as_bytes(vec, v) vec_pusharr(vec, (uint8_t *)v, sizeof(v) >> 3)
+#define vec_push_as_bytes(vec, v) vec_pusharr(vec, (uint8_t *)v, sizeof(*v))
 
 #define vec_push_str(v, str) vec_pusharr(v, str, strlen(str))
 

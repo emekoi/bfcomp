@@ -1,3 +1,5 @@
+#pragma once
+
 #define DMT_STACK_TRACE
 #include "rxi/dmt.h"
 

@@ -5,7 +5,7 @@
 void ir_ctx_free(ir_ctx *ctx) {
   while (ctx->patch) {
     ir_patch_t *prev = ctx->patch->prev;
-    free(ctx->patch);
+    dmt_free(ctx->patch);
     ctx->patch = prev;
   }
   vec_deinit(ctx);
@@ -41,7 +41,7 @@ size_t ir_ctx_parse(ir_ctx *ctx, const char *src) {
       push_op(IR_OP_TAPE, -count);
 #undef push_op
     case '[': {
-      ir_patch_t *next = calloc(1, sizeof(ir_patch_t));
+      ir_patch_t *next = dmt_calloc(1, sizeof(ir_patch_t));
       *next = (ir_patch_t){.addr = ctx->length, .prev = ctx->patch};
       ctx->patch = next;
       vec_push(ctx, ((ir_op_t){.kind = IR_OP_PATCH, .arg = 0}));
@@ -55,7 +55,7 @@ size_t ir_ctx_parse(ir_ctx *ctx, const char *src) {
         vec_push(ctx, ((ir_op_t){.kind = (ir_op_kind_t)LOOP_END,
                                  .arg = ctx->patch->addr}));
         ir_patch_t *tmp = ctx->patch->prev;
-        free(ctx->patch);
+        dmt_free(ctx->patch);
         ctx->patch = tmp;
         ptr++;
         continue;

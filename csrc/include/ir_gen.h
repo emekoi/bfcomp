@@ -21,7 +21,7 @@ typedef enum {
 typedef enum {
   LOOP_START = IR_OP_LOOP,
   LOOP_END = IR_OP_LOOP | (0x1L << (8 * sizeof(ir_op_kind_t) - 1))
-} ir_op_loir_op_flag;
+} ir_op_flag;
 
 typedef struct {
   ir_op_kind_t kind;

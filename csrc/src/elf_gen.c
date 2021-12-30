@@ -16,10 +16,6 @@
 #define align_to_down(val, align) ((val) & ~((align)-1))
 #define bswap(sz, val) __builtin_bswap##sz(val)
 
-#define vec_push_as_bytes(vec, v) vec_pusharr(vec, (uint8_t *)v, sizeof(v) >> 3)
-#define vec_push_str(v, str) vec_pusharr(v, str, strlen(str))
-#define vec_push_arr(v, arr) vec_pusharr(v, arr, sizeof(arr))
-
 typedef vec_t(uint8_t) bytes_t;
 typedef map_t(const char *) map_str_t;
 
