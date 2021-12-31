@@ -84,6 +84,16 @@ void write_elf_file(ir_ctx *ir_ctx, FILE *fp) {
                                   .sh_flags = SHF_ALLOC | SHF_EXECINSTR,
                                   .sh_addr = text->header.p_vaddr});
   elf_ctx.elf_header.e_entry = text->header.p_vaddr;
+
+  /* this is an ugly terrible hack. */
+  /* since we know that .bss comes directly after .text we hardcode loading
+   * SP_REG with the address of .bss. we can't do it before since we don't know
+   * how big .text will be and we don't it where we generate the rest of the
+   * machine code because i would like to think that code is somewhat clean and
+   * i don't want to ruin that. too much. */
+  /* preload SP_REG with the location of .bss that we will patch later */
+  ctx_push_code(text, 0xb8 + SP_REG);
+  vec_push_as_bytes(text, &text->header.p_vaddr);
   ir_ctx_compile(ir_ctx, (compile_ctx *)text);
 
   program_t *bss = gen_program_header(
@@ -96,7 +106,7 @@ void write_elf_file(ir_ctx *ir_ctx, FILE *fp) {
                      (Elf32_Shdr){.sh_type = SHT_NOBITS,
                                   .sh_flags = SHF_ALLOC | SHF_WRITE,
                                   .sh_addr = bss->header.p_vaddr});
-
+  *(int32_t *)(text->data + 1) = bss->header.p_vaddr;
   gen_elf_file(fp, &elf_ctx);
   make_exe(fp);
 }
