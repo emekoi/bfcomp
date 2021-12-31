@@ -108,15 +108,15 @@ void fix_header_offsets(elf_gen_ctx *ctx) {
   while ((name = map_next(&ctx->segments, &iter))) {
     program_t *program = map_get(&ctx->segments, name);
     uint64_t length = program->length;
-    if (program->length) {
+    if (program->length && program->capacity) {
       program->header.p_filesz = length;
       program->header.p_memsz = length;
       program->header.p_offset = offset;
       /* TODO: automatically allocate these virutal adresses */
       /* program->header.p_vaddr = 0; */
       offset = align_to(offset + length, PAGE_SIZE);
-    } else if (program->capacity) {
-      program->header.p_memsz = program->capacity;
+    } else if (program->length) {
+      program->header.p_memsz = program->length;
     }
   }
 
@@ -134,7 +134,7 @@ void fix_header_offsets(elf_gen_ctx *ctx) {
     section_t *section = map_get(&ctx->sections, name);
     uint64_t length = section->length;
     section->header.sh_name = ctx->sections.shstrtab.length;
-    vec_pusharr(&ctx->sections.shstrtab, name, strlen(name));
+    vec_pusharr(&ctx->sections.shstrtab, name, strlen(name) + 1);
     if (section->length && section->header.sh_type & ~SHT_NOBITS) {
       offset = align_to(offset + length, PAGE_SIZE);
     }
