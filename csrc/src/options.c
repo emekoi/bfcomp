@@ -8,15 +8,19 @@
 
 static struct option long_options[] = {{"output", required_argument, NULL, 'o'},
                                        {"compile", no_argument, NULL, 'c'},
+                                       {"dump", no_argument, NULL, 'd'},
                                        {NULL, 0, NULL, 0}};
 
 int parse_options(options_t *options, int argc, char *const argv[]) {
   int c = 0;
   int compiling = 0;
-  while ((c = getopt_long(argc, argv, "co:", long_options, NULL)) != -1) {
+  while ((c = getopt_long(argc, argv, "dco:", long_options, NULL)) != -1) {
     switch (c) {
     case 'c':
       compiling = 1;
+      break;
+    case 'd':
+      options->dump_ir = 1;
       break;
     case 'o': {
       size_t len = strlen(optarg);

@@ -34,8 +34,8 @@ typedef struct ir_patch {
 } ir_patch_t;
 
 typedef struct {
-  ir_patch_t *patch;
   vec_t(ir_op_t);
+  ir_patch_t *patch;
 } ir_ctx;
 
 /* #define ir_ctx_push(ctx) (ctx)->ptr[(ctx)->len++] */

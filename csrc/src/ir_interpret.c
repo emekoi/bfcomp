@@ -12,11 +12,11 @@ size_t ir_interpret(ir_ctx *ir_ctx, interpret_ctx_t *ctx) {
   size_t ip = 0;
   size_t sp = 0;
   char buf[1024] = {0};
-#define opcode(ir_op_ip) ir_ctx->data[ir_op_ip - 1]
+#define opcode(ir_op_ip) ir_ctx->data[ir_op_ip]
 #define dispatch(label, blk)                                                   \
   label : {                                                                    \
     if (0) {                                                                   \
-      printf("[%ld;%ld] %s\n", ip, sp, ir_fmt_op(opcode(ip), buf));            \
+      printf("[%8ld;%8ld] %s\n", ip, sp, ir_fmt_op(opcode(ip), buf));          \
     } else {                                                                   \
       unused(buf);                                                             \
     }                                                                          \
@@ -24,24 +24,34 @@ size_t ir_interpret(ir_ctx *ir_ctx, interpret_ctx_t *ctx) {
     goto *dispatch_table[opcode(++ip).kind & IR_OP_MAX];                       \
   }
 
-  goto *dispatch_table[opcode(++ip).kind];
+  goto *dispatch_table[opcode(ip).kind];
   dispatch(ir_op_tape, { sp += opcode(ip).arg; });
   dispatch(ir_op_cell, { ctx->data[sp] += opcode(ip).arg; });
   dispatch(ir_op_loop, {
-    int64_t new_ip = opcode(ip).arg;
-    if (!ctx->data[sp] && opcode(ip).kind == (ir_op_kind_t)LOOP_START)
-      ip = new_ip;
-    else if (ctx->data[sp] && opcode(ip).kind == (ir_op_kind_t)LOOP_END)
-      ip = new_ip;
+    int64_t delta = opcode(ip).arg;
+    if (!ctx->data[sp] && opcode(ip).kind == (ir_op_kind_t)LOOP_START) {
+      ip += delta;
+    } else if (ctx->data[sp] && opcode(ip).kind == (ir_op_kind_t)LOOP_END) {
+      ip += delta;
+    }
   });
-  dispatch(ir_op_write,
-           { fwrite(ctx->data + sp, sizeof(char), opcode(ip).arg, stdout); });
-  dispatch(ir_op_read,
-           { fread(ctx->data + sp, sizeof(char), opcode(ip).arg, stdout); });
+  dispatch(ir_op_write, {
+    for (int64_t i = 0; i < opcode(ip).arg; i++) {
+      fwrite(ctx->data + sp, sizeof(char), 1, stdout);
+    }
+  });
+  dispatch(ir_op_read, {
+    for (int64_t i = 0; i < opcode(ip).arg; i++) {
+      fread(ctx->data + sp, sizeof(char), 1, stdin);
+    }
+  });
   dispatch(ir_op_set, { ctx->data[sp] = opcode(ip).arg; });
   dispatch(ir_op_patch, {
     fputs("invalid instruction in stream", stderr);
     return 1;
   });
-  dispatch(ir_op_halt, { return 0; });
+  dispatch(ir_op_halt, {
+    fflush(stdout);
+    return 0;
+  });
 }

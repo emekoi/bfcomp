@@ -84,14 +84,25 @@ void write_elf_file(ir_ctx *ir_ctx, FILE *fp) {
                                   .sh_flags = SHF_ALLOC | SHF_EXECINSTR,
                                   .sh_addr = text->header.p_vaddr});
   elf_ctx.elf_header.e_entry = text->header.p_vaddr;
-
   ir_ctx_compile(ir_ctx, (compile_ctx *)text);
+
+  program_t *bss = gen_program_header(
+      &elf_ctx, ".bss",
+      (Elf32_Phdr){.p_type = PT_LOAD,
+                   .p_vaddr = text->header.p_vaddr + text->length,
+                   .p_flags = PF_R | PF_W});
+  bss->length = 30e3;
+  gen_section_header(&elf_ctx, ".bss",
+                     (Elf32_Shdr){.sh_type = SHT_NOBITS,
+                                  .sh_flags = SHF_ALLOC | SHF_WRITE,
+                                  .sh_addr = bss->header.p_vaddr});
+
   gen_elf_file(fp, &elf_ctx);
   make_exe(fp);
 }
 
 int main(int argc, char *argv[]) {
-  options_t options = {NULL, NULL};
+  options_t options = {NULL, NULL, 0};
   if (parse_options(&options, argc, argv)) {
     exit(EXIT_FAILURE);
   }
@@ -127,6 +138,11 @@ int main(int argc, char *argv[]) {
       return 1;
     }
   } while (read_bytes > 0);
+
+  if (options.dump_ir) {
+    ir_ctx_dump_ir(&ir_ctx);
+    return 0;
+  }
 
   if (!options.output_name) {
     interpret_ctx_t interpret_ctx = {0};

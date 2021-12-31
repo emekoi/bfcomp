@@ -3,6 +3,9 @@
 #include <string.h>
 
 void ir_ctx_free(ir_ctx *ctx) {
+  if (ctx->patch) {
+    fprintf(stderr, "unmatched '['");
+  }
   while (ctx->patch) {
     ir_patch_t *prev = ctx->patch->prev;
     dmt_free(ctx->patch);
@@ -50,17 +53,18 @@ size_t ir_ctx_parse(ir_ctx *ctx, const char *src) {
     }
     case ']': {
       if (ctx->patch) {
+        int64_t delta = ctx->length - ctx->patch->addr;
         ctx->data[ctx->patch->addr] =
-            (ir_op_t){.kind = (ir_op_kind_t)LOOP_START, .arg = ctx->length};
-        vec_push(ctx, ((ir_op_t){.kind = (ir_op_kind_t)LOOP_END,
-                                 .arg = ctx->patch->addr}));
+            (ir_op_t){.kind = (ir_op_kind_t)LOOP_START, .arg = delta};
+        vec_push(ctx,
+                 ((ir_op_t){.kind = (ir_op_kind_t)LOOP_END, .arg = -delta}));
         ir_patch_t *tmp = ctx->patch->prev;
         dmt_free(ctx->patch);
         ctx->patch = tmp;
         ptr++;
         continue;
       } else {
-        fputs("misplaced ']'", stderr);
+        fputs("unmatched ']'", stderr);
         return 1;
       }
     }
@@ -139,7 +143,7 @@ const char *ir_fmt_op(ir_op_t opcode, char *buf) {
   case IR_OP_LOOP:
     written =
         sprintf(buf, "%s %ld", jmp_table[opcode.kind == (ir_op_kind_t)LOOP_END],
-                abs_table[0]);
+                opcode.arg);
     break;
   case IR_OP_MAX:
     written = sprintf(buf, "halt");
