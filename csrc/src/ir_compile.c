@@ -123,11 +123,10 @@ static inline compile_result emit_code_loop(compile_ctx *ctx, ir_op_t op) {
     vec_push_as_bytes(ctx, &arg);
 
     /* je imm16/imm32 */
-    arg = (int32_t)(ctx->length - ctx->patch->addr);
-    ctx_push_code(ctx, 0x0F, 0x84); /* 0x0F is a prefix byte */
+    /* ctx_push_code(ctx, 0x0F, 0x84); /\* 0x0F is a prefix byte *\/ */
     ctx_patch_code(ctx, ctx->patch->addr, 0x0F, 0x84);
-    ctx->patch->addr += 2;
-    vec_insert_as_bytes(ctx, ctx->patch->addr, &arg);
+    arg = (int32_t)(delta + 6);
+    vec_insert_as_bytes(ctx, ctx->patch->addr + 2, &arg);
   }
 
   ir_patch_t *tmp = ctx->patch->prev;

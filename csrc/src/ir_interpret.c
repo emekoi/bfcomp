@@ -25,7 +25,7 @@ size_t ir_interpret(ir_ctx *ir_ctx, interpret_ctx_t *ctx) {
   }
 
   goto *dispatch_table[opcode(ip).kind];
-  dispatch(ir_op_tape, { sp += opcode(ip).arg; });
+  dispatch(ir_op_tape, { sp = (sp + opcode(ip).arg) % ctx->capacity; });
   dispatch(ir_op_cell, { ctx->data[sp] += opcode(ip).arg; });
   dispatch(ir_op_loop, {
     int64_t delta = opcode(ip).arg;
