@@ -4,6 +4,9 @@
 #include <elf.h>
 #include <stdio.h>
 
+#define align_to(val, align) (((val) + (align)-1) & ~((align)-1))
+#define align_to_down(val, align) ((val) & ~((align)-1))
+
 typedef struct {
   vec_t(uint8_t);
   Elf32_Phdr header;

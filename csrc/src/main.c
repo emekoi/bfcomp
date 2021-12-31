@@ -99,7 +99,8 @@ void write_elf_file(ir_ctx *ir_ctx, FILE *fp) {
   program_t *bss = gen_program_header(
       &elf_ctx, ".bss",
       (Elf32_Phdr){.p_type = PT_LOAD,
-                   .p_vaddr = text->header.p_vaddr + text->length,
+                   .p_vaddr =
+                       align_to(text->header.p_vaddr + text->length, 0x1000),
                    .p_flags = PF_R | PF_W});
   bss->length = 30e3;
   gen_section_header(&elf_ctx, ".bss",

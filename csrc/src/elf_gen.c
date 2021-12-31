@@ -12,8 +12,6 @@
  * though.
  * */
 
-#define align_to(val, align) (((val) + (align)-1) & ~((align)-1))
-#define align_to_down(val, align) ((val) & ~((align)-1))
 #define bswap(sz, val) __builtin_bswap##sz(val)
 
 typedef vec_t(uint8_t) bytes_t;
@@ -117,6 +115,7 @@ void fix_header_offsets(elf_gen_ctx *ctx) {
       offset = align_to(offset + length, PAGE_SIZE);
     } else if (program->length) {
       program->header.p_memsz = program->length;
+      program->header.p_offset = offset;
     }
   }
 
@@ -151,7 +150,6 @@ void fix_header_offsets(elf_gen_ctx *ctx) {
     }
   }
 
-  vec_push(&ctx->sections.shstrtab, '\0');
   ctx->sections.shstrtab.header.sh_size = ctx->sections.shstrtab.length;
   ctx->sections.shstrtab.header.sh_offset = offset;
   /* elf_header->e_shstrndx = elf_header->e_shnum - 1; */
@@ -207,7 +205,7 @@ void gen_elf_file(FILE *fp, elf_gen_ctx *ctx) {
   iter = map_iter(&ctx->segments);
   while ((name = map_next(&ctx->segments, &iter))) {
     program_t *program = map_get(&ctx->segments, name);
-    if (!program->length)
+    if (!program->capacity)
       continue;
     fseek(fp, program->header.p_offset, SEEK_SET);
     fwrite(program->data, sizeof(uint8_t), program->length, fp);
@@ -217,7 +215,7 @@ void gen_elf_file(FILE *fp, elf_gen_ctx *ctx) {
   iter = map_iter(&ctx->sections);
   while ((name = map_next(&ctx->sections, &iter))) {
     section_t *section = map_get(&ctx->sections, name);
-    if (!section->length)
+    if (!section->capacity)
       continue;
     fseek(fp, section->header.sh_offset, SEEK_SET);
     fwrite(section->data, sizeof(uint8_t), section->length, fp);

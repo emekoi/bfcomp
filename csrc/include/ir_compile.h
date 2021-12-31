@@ -6,7 +6,7 @@
 
 typedef struct {
   vec_t(uint8_t);
-  uint64_t last_label;
+  ir_patch_t *patch;
 } compile_ctx;
 
 typedef enum {
@@ -15,7 +15,7 @@ typedef enum {
 } compile_result;
 
 /* since we know we never do syscalls with more than 3 arguments and we never
- * use the stacl so we can use %edi as we see fit. it would make more sense to
+ * use the stack so we can use %edi as we see fit. it would make more sense to
  * use %ebp, but that makes encoding instructions a bit harder. e.g inc (%ebp)
  * needs 3 whereas only 2 are needed for other registers. */
 #define SP_REG REG_EDI

@@ -88,10 +88,13 @@ typedef int int_t;
 
 #define vec_pop(v) (v)->data[--(v)->length]
 
-#define vec_fill(v, n, val)                                                    \
+#define vec_fill(v, val, count)                                                \
   do {                                                                         \
-    for (uint_t i = 0; i < n; i++)                                             \
-      vec_push(v, val);                                                        \
+    if (vec_reserve_po2_(vec_unpack_(v), (v)->length + (count)) != 0)          \
+      break;                                                                   \
+                                                                               \
+    for (uint_t i__ = 0; i__ < (count); i__++)                                 \
+      (v)->data[(v)->length++] = (val);                                        \
   } while (0)
 
 #define vec_splice(v, start, count)                                            \
@@ -101,9 +104,26 @@ typedef int int_t;
   (vec_swapsplice_(vec_unpack_(v), start, count), (v)->length -= (count))
 
 #define vec_insert(v, idx, val)                                                \
-  (vec_insert_(vec_unpack_(v), idx)                                            \
+  (vec_insert_(vec_unpack_(v), idx, 1)                                         \
        ? -1                                                                    \
        : ((v)->data[idx] = (val), (v)->length++, 0))
+
+#define vec_insertarr(v, idx, arr, count)                                      \
+  do {                                                                         \
+    if (vec_insert_(vec_unpack_(v), idx, count) != 0)                          \
+      break;                                                                   \
+    (v)->length += count;                                                      \
+    for (uint_t i__ = 0; i__ < (count); i__++) {                               \
+      (v)->data[idx + i__] = (arr)[i__];                                       \
+    }                                                                          \
+  } while (0)
+
+#define vec_insert_as_bytes(vec, idx, v)                                       \
+  vec_insertarr(vec, idx, (uint8_t *)v, sizeof(*v))
+
+#define vec_insert_str(v, idx, str) vec_insertarr(v, idx, str, strlen(str))
+
+#define vec_insert_arr(v, idx, arr) vec_insertarr(v, idx, arr, sizeof(arr))
 
 #define vec_sort(v, fn) qsort((v)->data, (v)->length, sizeof(*(v)->data), fn)
 
@@ -216,7 +236,7 @@ uint_t vec_reserve_po2_(uint8_t **data, uint_t *length, uint_t *capacity,
 uint_t vec_compact_(uint8_t **data, uint_t *length, uint_t *capacity,
                     uint_t memsz, uint8_t *borrowed);
 uint_t vec_insert_(uint8_t **data, uint_t *length, uint_t *capacity,
-                   uint_t memsz, uint8_t *borrowed, uint_t idx);
+                   uint_t memsz, uint8_t *borrowed, uint_t idx, uint_t count);
 void vec_splice_(uint8_t **data, uint_t *length, uint_t *capacity, uint_t memsz,
                  uint8_t *borrowed, uint_t start, uint_t count);
 void vec_swapsplice_(uint8_t **data, uint_t *length, uint_t *capacity,
@@ -293,11 +313,11 @@ uint_t vec_compact_(uint8_t **data, uint_t *length, uint_t *capacity,
 }
 
 uint_t vec_insert_(uint8_t **data, uint_t *length, uint_t *capacity,
-                   uint_t memsz, uint8_t *borrowed, uint_t idx) {
-  uint_t err = vec_expand_(data, length, capacity, memsz, borrowed);
+                   uint_t memsz, uint8_t *borrowed, uint_t idx, uint_t count) {
+  uint_t err = vec_expand_(data, length, capacity, memsz * count, borrowed);
   if (err)
     return err;
-  memmove(*data + (idx + 1) * memsz, *data + idx * memsz,
+  memmove(*data + (idx + count) * memsz, *data + idx * memsz,
           (*length - idx) * memsz);
   return 0;
 }
