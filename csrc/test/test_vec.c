@@ -74,7 +74,7 @@ int intptrcmp(const void *a_, const void *b_) {
     test_assert(v.data[9] == 9 * 2);                                           \
     vec_int_t v2 = vec_slice(&v, 0, 10);                                       \
     vec_clear(&v2);                                                            \
-    vec_fill(&v2, 10, 99);                                                     \
+    vec_fill(&v2, 99, 10);                                                     \
     for (uint_t i = 0; i < v2.length; i++)                                     \
       test_assert(v2.data[i] == 99);                                           \
     test_assert(v2.length == 10);                                              \
@@ -105,7 +105,7 @@ int intptrcmp(const void *a_, const void *b_) {
   {                                                                            \
     test_section("vec_fill", suffix);                                          \
     vec_int_t v = vec_gen();                                                   \
-    vec_fill(&v, 10, 99);                                                      \
+    vec_fill(&v, 99, 10);                                                      \
     for (uint_t i = 0; i < v.length; i++)                                      \
       test_assert(v.data[i] == 99);                                            \
     test_assert(v.length == 10);                                               \
@@ -150,6 +150,26 @@ int intptrcmp(const void *a_, const void *b_) {
     test_assert(vec_insert(&v, 10, 123) == 0);                                 \
     vec_insert(&v, v.length, 789);                                             \
     test_assert(v.data[v.length - 1] == 789);                                  \
+    vec_deinit(&v);                                                            \
+  }                                                                            \
+  {                                                                            \
+    test_section("vec_insertarr", suffix);                                     \
+    vec_int_t v = vec_gen();                                                   \
+    for (int i = 0; i < 1000; i++)                                             \
+      vec_insert(&v, 0, i);                                                    \
+    test_assert(v.data[0] == 999);                                             \
+    test_assert(v.data[v.length - 1] == 0);                                    \
+    vec_insert(&v, 10, 123);                                                   \
+    test_assert(v.data[10] == 123);                                            \
+    test_assert(v.length == 1001);                                             \
+    vec_insert(&v, v.length - 2, 678);                                         \
+    test_assert(v.data[999] == 678);                                           \
+    test_assert(vec_insert(&v, 10, 123) == 0);                                 \
+    vec_insert(&v, v.length, 789);                                             \
+    test_assert(v.data[v.length - 1] == 789);                                  \
+    vec_insertarr(&v, 0, ((int[]){0, 1, 2, 3, 4, 5, 6, 7, 8, 9}), 10);         \
+    for (uint_t i = 0; i < 10; i++)                                            \
+      test_assert(v.data[i] == i);                                             \
     vec_deinit(&v);                                                            \
   }                                                                            \
   {                                                                            \

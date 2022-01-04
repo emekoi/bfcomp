@@ -30,8 +30,6 @@ static inline compile_result emit_add_sub(compile_ctx *ctx, mod_rm_mode mode,
   if (op.arg > INT32_MAX || op.arg < INT32_MIN) {
     return COMPILE_OPERAND_SIZE;
   }
-  /* x86 instruction encoding is a pain. no wonder people say RISC-V is the
-   * future. */
   switch (op.arg) {
   case 1:
     /* inc %SP_REG */
@@ -60,7 +58,6 @@ static inline compile_result emit_add_sub(compile_ctx *ctx, mod_rm_mode mode,
       }
     } else {
       if (op.arg <= 0xFF) {
-        int8_t t = -op.arg;
         /* sub %SP_REG, imm8 */
         ctx_push_code(ctx, 0x83, mod_rm(mode, 5, SP_REG), (uint8_t)(-op.arg));
       } else {
@@ -91,8 +88,8 @@ static inline compile_result emit_code_loop(compile_ctx *ctx, ir_op_t op) {
     return COMPILE_OPERAND_SIZE;
   }
 
-  /* i'm not smart enough to think of another way that still allows our code to
-   * contiguous in memory, so patching will have to do.  */
+  /* i'm not smart enough to think of another way that still allows our code
+   * to contiguous in memory, so patching will have to do.  */
   if (op.kind == IR_OP_LOOP) {
     /* cmp (%SP_REG), $0 */
     ctx_push_code(ctx, 0x80, mod_rm(MODE_REG_INDIRECT, 0x7, SP_REG), 0x0);
@@ -108,8 +105,9 @@ static inline compile_result emit_code_loop(compile_ctx *ctx, ir_op_t op) {
   int64_t delta = ctx->length - ctx->patch->addr;
 
   /* check if we can do a short jump */
-  if (delta <= INT8_MAX) {
-    /* kind of a ugly hack but we want to skip over the code we just emitted */
+  if (delta - 2 <= INT8_MAX) {
+    /* kind of a ugly hack but we want to skip over the code we just emitted
+     */
     /* jne imm8 */
     ctx_push_code(ctx, 0x75, -(int8_t)(delta + 2));
     delta = ctx->length - ctx->patch->addr;
@@ -162,7 +160,8 @@ static inline compile_result emit_code_write(compile_ctx *ctx, ir_op_t op) {
     syscall_const_arg(ctx, argc++, &fd);
     /* mov %edi, %ecx */
     syscall_reg_arg(ctx, argc, SP_REG);
-    /* we have to do this outside since the macro expansion is not hygenic :( */
+    /* we have to do this outside since the macro expansion is not hygenic :(
+     */
     argc += 1;
     fd = 1;
     /* mov $1, %esi */
