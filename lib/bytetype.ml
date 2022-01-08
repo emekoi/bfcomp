@@ -5,7 +5,9 @@ let (<<) f g x = f (g x)
 
 (* S combinator f >< g *)
 let (><) f g x = f x (g x)
-let (>|<) f g x = f (g x) x
+(* let (>|<) f g = ((><) f << Fun.const) >< g *)
+(* let (>|<) f g x = f (g x) x *)
+let (>|<) f g x = (><) f (Fun.const x) (g x)
 
 (* esentially a typeclass. tells us how to read and write the type and its size *)
 type 'a backing = {
@@ -69,8 +71,8 @@ module T = struct
   (* smart constructor for constant sized "simple" types like ints and variant with no fields *)
   let mk_const s t f =
     (* can we be more succint here? *)
-    let t' b i v = t b i v; Option.value s ~default:0 in
-    backing (Fun.const s) t' f
+    let t' b i v = t b i v; s in
+    backing (Fun.const (Some s)) t' f
 
   (* smart constructors for iterable types. NOTE: we do not suppotrt arbitralily long iterables OOTB.
        i.e. you would need to write the routines for a stream yourself *)
@@ -93,7 +95,7 @@ module T = struct
     let fromBytes = fun b i -> iter.init l (fun idx -> t.fromBytes b (idx + i)) in
     { size; toBytes; fromBytes }
 
-  let char = Bytes.(mk_const (Some 1) set get)
+  let char = Bytes.(mk_const 1 set get)
 
   let mk_int s t f =
     let t' b i v = t v b i; s in
@@ -170,9 +172,10 @@ end
 
 let backed t v = Field (Backed (v, t))
 let range x y = Field (Range(x, y))
-(* let bytes x = Field (Bytes x) *)
+let bytes x = Field (Bytes x)
 
 let char = backed T.char
+
 let u8 = backed T.u8 << Uint8.of_int
 let u16_le = backed T.u16_le << Uint16.of_int
 let u32_le = backed T.u32_le << Uint32.of_int
@@ -180,6 +183,8 @@ let u64_le = backed T.u64_le << Uint64.of_int
 let u16_be = backed T.u16_be << Uint16.of_int
 let u32_be = backed T.u32_be << Uint32.of_int
 let u64_be = backed T.u64_be << Uint64.of_int
+
+let i8 = backed T.i8 << Int8.of_int
 let i16_le = backed T.i16_le << Int16.of_int
 let i32_le = backed T.i32_le << Int32.of_int
 let i64_le = backed T.i64_le << Int64.of_int
@@ -209,11 +214,3 @@ let write =
     | None -> None
     | Some x -> Option.map ((+) x) (size f)
   in List.fold_left g (Some 0)
-
-
-let elf_header = [
-  u8 0x7f;
-  string "ELF";
-]
-
-let size_elf = sizeof elf_header
