@@ -26,30 +26,39 @@ type any_field = Field : _ field -> any_field [@@unboxed]
 (* module TODO = struct *)
 (*   (\* we want to abstract away types that can be iterated on *\) *)
 (*   module type IterableT = sig *)
-(*     type t *)
-(*     type e *)
-(*     val fold : (int -> e -> int) -> int -> t -> int *)
-(*     val iter : (e -> unit) -> t -> unit *)
-(*     val init : int -> (int -> e) -> t *)
+(*     type 'e t *)
+(*     val fold : ('a -> 'e -> 'a) -> 'a -> 'e t -> 'a *)
+(*     val init : int -> (int -> 'e) -> 'e t *)
 (*   end *)
 
 (*   (\* this is functor takes a module and returns a struct with the function *)
 (*      we need to read/write and get length info about the module *\) *)
 (*   module MakeIterable (T: IterableT) = struct *)
 (*     let mk_iter = fun t (l: int) -> *)
-(*       let size v = T.fold (fun acc x -> acc + t.size x) 0 v in *)
-(*       let toBytes b i v = T.iter (t.toBytes b i) v in *)
+(*       let size o = *)
+(*         let f acc e = *)
+(*           match acc with *)
+(*           | None -> None *)
+(*           | Some x -> Option.map ((+) x) (t.size e) *)
+(*         in T.fold f (Some 0) o in *)
+(*       let toBytes b i v = T.fold (fun acc x -> acc + t.toBytes b i x) 0 v in *)
 (*       let fromBytes = fun b i -> T.init l (fun idx -> t.fromBytes b (idx + i)) in *)
 (*       { size; toBytes; fromBytes } *)
 (*   end *)
+
 (*   module StringT = MakeIterable(struct *)
-(*       type t = string *)
-(*       type e = char *)
+(*       type _ t = *)
+(*         | StringT : string -> char t *)
 (*       let fold = String.fold_left *)
-(*       let iter = String.iter *)
 (*       let init = String.init *)
 (*     end) *)
-(*   let string = StringT.mk_iter *)
+(*   (\* let string = StringT.mk_iter *\) *)
+
+(*   module ListT = MakeIterable(struct *)
+(*       type 'a t = 'a list *)
+(*       let fold = List.fold_left *)
+(*       let init = List.init *)
+(*     end) *)
 (* end *)
 
 (* we keep the backing types in a seperate namespace for convience and so we can expose smart constructors with the same names *)
@@ -65,26 +74,25 @@ module T = struct
 
   (* smart constructors for iterable types. NOTE: we do not suppotrt arbitralily long iterables OOTB.
        i.e. you would need to write the routines for a stream yourself *)
-  (* type ('a, 'b, 'c) foldT = ('a -> 'b -> 'a) -> 'a -> 'c *)
-  (* let mk_iter (fold :('a -> 'b -> 'a) -> 'a -> 'c) iter init = *)
-  (* let mk_iter : type ce c. (('a -> ce -> 'a) -> 'a -> c -> 'a) -> (int -> (int -> ce) -> c) -> (ce backing -> int -> c backing) = *)
-  type ('e, 'c) foldT = {fold : 'a. ('a -> 'e -> 'a) -> 'a -> 'c -> 'a}
-  (* because we can't pass polymorhphics functions for some reason??? *)
-  let mk_iter : type a c. (a, c) foldT -> (int -> (int -> a) -> c) -> (a backing -> int -> c backing) =
-    fun fold init t (l: int) ->
+  (* we need this because we can't pass polymorhphics functions for some reason??? *)
+  type ('e, 'c) iterT = {
+    fold : 'a. ('a -> 'e -> 'a) -> 'a -> 'c -> 'a;
+    init : int -> (int -> 'e) -> 'c
+  }
+
+  (* let mk_iter : type a c. (a, c) foldT -> (int -> (int -> a) -> c) -> (a backing -> int -> c backing) = *)
+  let mk_iter =
+    fun iter t (l: int) ->
     let size o =
       let f acc e =
         match acc with
         | None -> None
         | Some x -> Option.map ((+) x) (t.size e)
-      in fold.fold f (Some 0) o in
-    (* let size v = *)
-    (*   fold (fun acc x -> acc + t.size x) 0 v in *)
-    let toBytes b i v = fold.fold (fun acc x -> acc + t.toBytes b i x) 0 v in
-    let fromBytes = fun b i -> init l (fun idx -> t.fromBytes b (idx + i)) in
+      in iter.fold f (Some 0) o in
+    let toBytes b i v = iter.fold (fun acc x -> acc + t.toBytes b i x) 0 v in
+    let fromBytes = fun b i -> iter.init l (fun idx -> t.fromBytes b (idx + i)) in
     { size; toBytes; fromBytes }
 
-  (* can we be more succint here? *)
   let char = Bytes.(mk_const (Some 1) set get)
 
   let mk_int s t f =
@@ -109,14 +117,14 @@ module T = struct
 
   (* i'm not quite why, but if we eta reduce these it does not type check *)
   let array t l =
-    let fold = {fold = Array.fold_left} in
-    Array.(mk_iter fold init) t l
+    let iter = Array.{fold = fold_left; init} in
+    mk_iter iter t l
   let list t l =
-    let fold = {fold = List.fold_left} in
-    List.(mk_iter fold init) t l
+    let iter = List.{fold = fold_left; init} in
+    mk_iter iter t l
   let string =
-    let fold = {fold = String.fold_left} in
-    String.(mk_iter fold init) char
+    let iter = String.{fold = fold_left; init} in
+    mk_iter iter char
 end
 
 module Unsized = struct
