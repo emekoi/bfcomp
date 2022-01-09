@@ -18,9 +18,9 @@ type 'a backing = {
 
 (* the field in the data we are trying to represent *)
 type _ field =
-  | Backed : ('a * 'a backing) -> ('a * 'a backing) field (* a chunk of data that has a unique backing *)
-  | Range : int * int -> (int * int) field (* aliases some other region of our data *)
-  | Bytes : int -> int field               (* some opaque block of memory we don't care about *)
+  | Backed : ('a * 'a backing) -> 'a field (* a chunk of data that has a unique backing *)
+  (* | Range : (int * int * 'a backing) -> 'a field (\* aliases some other region of our data *\) *)
+  | Range : (int * int * 'a backing) -> unit field
 
 (* we need this existential type for heterogenous lists to describe our layouts *)
 type any_field = Field : _ field -> any_field [@@unboxed]
@@ -129,7 +129,7 @@ module T = struct
     mk_iter iter char
 end
 
-module Unsized = struct
+module StreamT = struct
   type 'a t = {
     mutable size: int option;
     stream: 'a Stream.t
@@ -171,8 +171,7 @@ module Unsized = struct
 end
 
 let backed t v = Field (Backed (v, t))
-let range x y = Field (Range(x, y))
-let bytes x = Field (Bytes x)
+let range t x y = Field (Range(x, y, t))
 
 let char = backed T.char
 
@@ -196,21 +195,40 @@ let list t = backed >|< (T.list t << List.length)
 let array t = backed >|< (T.array t << Array.length)
 let string = backed >|< (T.string << String.length)
 
-let size : type a. a field -> int option = function
+let get : type a. a field -> a  = function
+  | Range _ -> ()
+  | Backed (b, _) -> b
+
+let set : type a. a field -> a -> a field = fun f v ->
+  match f with
+  (* how are we going to get this to work? *)
+  | Range x -> Range x
+  | Backed (_, t) -> Backed (v, t)
+
+let read : type a. Bytes.t -> int -> a backing -> a field = fun b i t ->
+  Backed(t.fromBytes b i, t)
+
+let write : type a. Bytes.t -> int -> a field -> int =
+  fun b i f -> match f with
+    | Backed(v, t) -> t.toBytes b i v
+    | Range _ -> 0
+
+let sizeof : type a. a field -> int option = function
   | Range _ -> Some 0
-  | Bytes x -> Some x
   | Backed(v, b) -> b.size v
 
-let sizeof =
+let sizeofAny =
   let g acc (Field f) =
     match acc with
     | None -> None
-    | Some x -> Option.map ((+) x) (size f)
+    | Some x -> Option.map ((+) x) (sizeof f)
   in List.fold_left g (Some 0)
 
-let write =
-  let g acc (Field f) =
-    match acc with
-    | None -> None
-    | Some x -> Option.map ((+) x) (size f)
-  in List.fold_left g (Some 0)
+
+(* type _ foo = *)
+(*   | Foo : int -> unit foo *)
+
+(* let mkFoo a = Foo a *)
+
+(* let fk = function *)
+(*   | Foo a -> a *)

@@ -42,7 +42,7 @@ module T :  sig
   val string : int -> string backing
 end
 
-module Unsized : sig
+module StreamT : sig
   type 'a t
   val stream : 'a backing -> (int -> Bytes.t -> int -> 'a option) -> 'a t backing
   val streamCount : 'a backing -> int -> 'a t backing
@@ -50,8 +50,7 @@ module Unsized : sig
 end
 
 val backed : 'a backing -> 'a -> any_field
-val range : int -> int -> any_field
-val bytes : int -> any_field
+val range : 'a backing -> int -> int -> any_field
 
 val char : char -> any_field
 
@@ -75,6 +74,9 @@ val list : 'a backing -> 'a list -> any_field
 val array : 'a backing -> 'a array -> any_field
 val string : string -> any_field
 
-val size : 'a field -> int option
-val sizeof : any_field list -> int option
-val write : any_field list -> int option
+val get : 'a field -> 'a
+val set : 'a field -> 'a -> 'a field
+val write : Bytes.t -> int -> 'a field -> int
+val read : Bytes.t -> int -> 'a backing -> 'a field
+val sizeof : 'a field -> int option
+val sizeofAny : any_field list -> int option
