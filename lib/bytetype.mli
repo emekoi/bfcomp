@@ -50,7 +50,6 @@ module StreamT : sig
 end
 
 val backed : 'a backing -> 'a -> any_field
-val range : 'a backing -> int -> int -> any_field
 
 val char : char -> any_field
 
