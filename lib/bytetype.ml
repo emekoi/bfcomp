@@ -1,6 +1,7 @@
 open Stdint
 open Combinators
 
+(* abstracts the size of some type *)
 type 'a size =
   | Static: int -> _ size
   | Dynamic: ('a -> int option) -> 'a size
@@ -18,6 +19,8 @@ type _ field = Backed : ('a * 'a backing) -> 'a field [@@unboxed]
 
 (* we need this existential type for heterogenous lists to describe our layouts *)
 type any_field = Field : _ field -> any_field [@@unboxed]
+
+let map_ref r f = r := f !r
 
 (* we keep the backing types in a seperate namespace for convience and so we can expose smart constructors with the same names *)
 module T = struct
@@ -42,13 +45,12 @@ module T = struct
   let mk_iter =
     fun iter t (l: int) ->
     let sizeof o =
-      let f acc e =
-        match acc with
-        | None -> None
-        | Some x -> match t.size with
+      let sizeIter acc e =
+        let bindFn x = match t.size with
           | Static s -> Some (x + s)
           | Dynamic s -> Option.map ((+) x) (s e)
-      in iter.fold f (Some 0) o in
+        in Option.bind acc bindFn
+      in iter.fold sizeIter (Some 0) o in
     let toBytes b i v = iter.fold (fun acc x -> acc + t.toBytes b i x) 0 v in
     (* this does not work for anything larger than a byte :/ *)
     let fromBytes = fun b i ->
@@ -56,11 +58,9 @@ module T = struct
       let f _ =
         let elem = t.fromBytes b (i + !written) in
         let () = match t.size with
-          | Static s -> written := s + !written
+          | Static s -> map_ref written ((+) s)
           | Dynamic sf ->
-            match sf elem with
-            | Some s ->  written := s + !written
-            | None -> ()
+            Option.iter (map_ref written << (+)) (sf elem)
         in elem
       in
       iter.init l f in
@@ -112,7 +112,7 @@ module StreamT = struct
     let idx = ref 0 in
     let f e =
       let written = t.toBytes b (!idx + i) e in
-      idx := !idx + written in
+      map_ref idx ((+) written) in
     Stream.iter f s.stream;
     s.size <- Some !idx;
     !idx
@@ -120,16 +120,15 @@ module StreamT = struct
   let streamOfBytes (t : 'a backing) from = fun b i ->
     let idx = ref 0 in
     let f si =
-      match from si b (!idx + i) with
-      | None -> None
-      | Some e ->
+      let bindFn e =
         let () = match t.size with
-          | Static s -> idx := s + !idx
+          | Static s -> map_ref idx ((+) s)
           | Dynamic sf ->
             match sf e with
-            | Some s -> idx := s + !idx
+            | Some s -> map_ref idx ((+) s)
             | None -> ()
         in Some e
+      in Option.bind (from si b (!idx + i)) bindFn
     in {size = Some !idx; stream = Stream.from f}
 
   let stream t f =
