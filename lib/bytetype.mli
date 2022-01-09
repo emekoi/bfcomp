@@ -1,7 +1,11 @@
 open Stdint
 
+type 'a size =
+  | Static: int -> _ size
+  | Dynamic: ('a -> int option) -> 'a size
+
 type 'a backing = {
-  size : 'a -> int option;
+  size : 'a size;
   toBytes : Bytes.t -> int -> 'a -> int;
   fromBytes : Bytes.t -> int -> 'a;
 }
@@ -15,7 +19,7 @@ module T :  sig
     init : int -> (int -> 'e) -> 'c;
   }
 
-  val backing : ('a -> int option) -> (Bytes.t -> int -> 'a -> int) -> (Bytes.t -> int -> 'a) -> 'a backing
+  val backing : 'a size -> (Bytes.t -> int -> 'a -> int) -> (Bytes.t -> int -> 'a) -> 'a backing
   val mk_const : int -> (Bytes.t -> int -> 'a -> unit) -> (Bytes.t -> int -> 'a) -> 'a backing
   val mk_iter : ('a, 'b) iterT -> 'a backing -> int -> 'b backing
   val mk_int : int -> ('a -> Bytes.t -> int -> unit) -> (Bytes.t -> int -> 'a) -> 'a backing
@@ -77,5 +81,4 @@ val get : 'a field -> 'a
 val set : 'a field -> 'a -> 'a field
 val write : Bytes.t -> int -> 'a field -> int
 val read : Bytes.t -> int -> 'a backing -> 'a field
-val sizeof : 'a field -> int option
-val sizeofAny : any_field list -> int option
+val sizeof : any_field -> int option

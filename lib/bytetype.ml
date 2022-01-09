@@ -1,17 +1,13 @@
 open Stdint
+open Combinators
 
-(* function compisition f << g *)
-let (<<) f g x = f (g x)
-
-(* S combinator f >< g *)
-let (><) f g x = f x (g x)
-(* let (>|<) f g = ((><) f << Fun.const) >< g *)
-(* let (>|<) f g x = f (g x) x *)
-let (>|<) f g x = (><) f (Fun.const x) (g x)
+type 'a size =
+  | Static: int -> _ size
+  | Dynamic: ('a -> int option) -> 'a size
 
 (* esentially a typeclass. tells us how to read and write the type and its size *)
 type 'a backing = {
-  size : 'a -> int option;
+  size : 'a size;
   toBytes : Bytes.t -> int -> 'a -> int;
   fromBytes : Bytes.t -> int -> 'a;
 }
@@ -32,7 +28,7 @@ module T = struct
   let mk_const s t f =
     (* can we be more succint here? *)
     let t' b i v = t b i v; s in
-    backing (Fun.const (Some s)) t' f
+    backing (Static s) t' f
 
   (* smart constructors for iterable types. NOTE: we do not suppotrt arbitralily long iterables OOTB.
        i.e. you would need to write the routines for a stream yourself *)
@@ -45,21 +41,36 @@ module T = struct
   (* let mk_iter : type a c. (a, c) foldT -> (int -> (int -> a) -> c) -> (a backing -> int -> c backing) = *)
   let mk_iter =
     fun iter t (l: int) ->
-    let size o =
+    let sizeof o =
       let f acc e =
         match acc with
         | None -> None
-        | Some x -> Option.map ((+) x) (t.size e)
+        | Some x -> match t.size with
+          | Static s -> Some (x + s)
+          | Dynamic s -> Option.map ((+) x) (s e)
       in iter.fold f (Some 0) o in
     let toBytes b i v = iter.fold (fun acc x -> acc + t.toBytes b i x) 0 v in
-    let fromBytes = fun b i -> iter.init l (fun idx -> t.fromBytes b (idx + i)) in
-    { size; toBytes; fromBytes }
+    (* this does not work for anything larger than a byte :/ *)
+    let fromBytes = fun b i ->
+      let written = ref 0 in
+      let f _ =
+        let elem = t.fromBytes b (i + !written) in
+        let () = match t.size with
+          | Static s -> written := s + !written
+          | Dynamic sf ->
+            match sf elem with
+            | Some s ->  written := s + !written
+            | None -> ()
+        in elem
+      in
+      iter.init l f in
+    { size = Dynamic sizeof; toBytes; fromBytes }
 
   let char = Bytes.(mk_const 1 set get)
 
   let mk_int s t f =
     let t' b i v = t v b i; s in
-    backing (Fun.const (Some s)) t' f
+    backing (Static s) t' f
 
   let u8 = Uint8.(mk_int 1 to_bytes_little_endian of_bytes_little_endian)
   let u16_le = Uint16.(mk_int 2 to_bytes_little_endian of_bytes_little_endian)
@@ -112,12 +123,17 @@ module StreamT = struct
       match from si b (!idx + i) with
       | None -> None
       | Some e ->
-        idx := Option.fold ~none:!idx ~some:((+) !idx) (t.size e);
-        Some e
+        let () = match t.size with
+          | Static s -> idx := s + !idx
+          | Dynamic sf ->
+            match sf e with
+            | Some s -> idx := s + !idx
+            | None -> ()
+        in Some e
     in {size = Some !idx; stream = Stream.from f}
 
   let stream t f =
-    {size = streamSize; toBytes = streamToBytes t; fromBytes = streamOfBytes t f}
+    {size = Dynamic streamSize; toBytes = streamToBytes t; fromBytes = streamOfBytes t f}
 
   let streamCount t n =
     let from si b idx = if si < n then Some (t.fromBytes b idx) else None in
@@ -150,9 +166,9 @@ let i16_be = backed T.i16_be << Int16.of_int
 let i32_be = backed T.i32_be << Int32.of_int
 let i64_be = backed T.i64_be << Int64.of_int
 
-let list t = backed >|< (T.list t << List.length)
-let array t = backed >|< (T.array t << Array.length)
-let string = backed >|< (T.string << String.length)
+let list t = backed >*< (T.list t << List.length)
+let array t = backed >*< (T.array t << Array.length)
+let string = backed >*< (T.string << String.length)
 
 let get : type a. a field -> a =
   fun (Backed(b, _)) -> b
@@ -166,12 +182,7 @@ let read : type a. Bytes.t -> int -> a backing -> a field = fun b i t ->
 let write : type a. Bytes.t -> int -> a field -> int =
   fun b i (Backed(v, t)) -> t.toBytes b i v
 
-let sizeof : type a. a field -> int option =
-  fun (Backed(v, b)) -> b.size v
-
-let sizeofAny =
-  let g acc (Field f) =
-    match acc with
-    | None -> None
-    | Some x -> Option.map ((+) x) (sizeof f)
-  in List.fold_left g (Some 0)
+let sizeof (Field Backed(v, b)) =
+  match b.size with
+  | Static s -> Some s
+  | Dynamic so -> so v
