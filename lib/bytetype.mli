@@ -12,6 +12,7 @@ type 'a backing = {
 
 type _ field
 type any_field
+type any_backing
 
 module T :  sig
   type ('e, 'c) iterT = {

@@ -17,7 +17,8 @@ type 'a backing = {
 (* a chunk of data that has a unique backing *)
 type _ field = Backed : ('a * 'a backing) -> 'a field [@@unboxed]
 
-(* we need this existential type for heterogenous lists to describe our layouts *)
+(* we need these existential types for heterogenous lists to describe our layouts *)
+type any_backing = Backing : _ backing -> any_backing [@@unboxed]
 type any_field = Field : _ field -> any_field [@@unboxed]
 
 let map_ref r f = r := f !r

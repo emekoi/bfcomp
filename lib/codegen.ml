@@ -68,7 +68,7 @@ let rec log2 n = if n <= 1 then 0 else 1 + log2 (n asr 1)
 let align n a = if n >= 0 then (n + a - 1) land -a else n land -a
 
 let encode_int : int -> any_op =
- fun v ->
+  fun v ->
   let s = if v > 0 then 1 else if v = 0 then 0 else -1 in
   match log2 (abs v) with
   | v when v >= 0 && v < 8 -> Op (imm8 (v * s))
@@ -77,7 +77,7 @@ let encode_int : int -> any_op =
   | _ -> invalid_arg (string_of_int v ^ " is too large")
 
 let encode_uint : int -> any_op =
- fun v ->
+  fun v ->
   match log2 (abs v) with
   | v when v >= 0 && v < 8 -> Op (uimm8 v)
   | v when v >= 8 && v < 16 -> Op (uimm16 v)
@@ -85,7 +85,7 @@ let encode_uint : int -> any_op =
   | _ -> invalid_arg (string_of_int v ^ " is too large")
 
 let emit_instr : type a. t -> a instr -> unit =
- fun b ->
+  fun b ->
   let () = b.length <- b.length + 1 in
   function
   | Mov (_op1, _op2) -> ()
@@ -116,7 +116,7 @@ let emit_loop b gen_body =
   emit_instr b (Jmp (JNZ loop_start))
 
 let emit_syscall : type a. t -> uint16 -> a op list -> unit =
- fun b sys args ->
+  fun b sys args ->
   if List.length args > 5 then
     raise (Invalid_argument "too many args for syscall")
   else
