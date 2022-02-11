@@ -5,8 +5,23 @@
 #include <string.h>
 #include <unistd.h>
 
+/* utilize recursion to lower loops.
+ * when we hit a loop, write the prelude slice the remaining data, then encode
+ * the body, then encode the epilogue */
+
+/* we will be copying the technique llvm uses of linked list of arrays. but with
+ * a twist: since the analysis we have to do is fairlt simply we can simply have
+ * a separate array for the loops body and links to the code before and after it
+ * (code -> loop -> code). we can then encode the loop body and worry about
+ * relaxation later. */
+
+/* or we could go with the recursive approach and merely allocate a new array,
+ * pass it to the recursive call, then use its size to set up prologue and
+ * epilogue. */
+
 static const char *compile_result_str[] = {
     [COMPILE_OPERAND_SIZE] = "operand size too big",
+    [COMPILE_MALFORMED_LOOP] = "malformed loop",
     [COMPILE_OK] = "ok",
 };
 
@@ -71,66 +86,88 @@ static inline compile_result emit_add_sub(compile_ctx *ctx, mod_rm_mode mode,
   return COMPILE_OK;
 }
 
-static inline compile_result emit_code_tape(compile_ctx *ctx, ir_op_t op) {
-  return emit_add_sub(ctx, MODE_REG_DIRECT, op);
+static inline compile_result emit_code_tape(compile_ctx *ctx, ir_ctx *ctx_ir,
+                                            size_t *idx) {
+  return emit_add_sub(ctx, MODE_REG_DIRECT, ctx_ir->data[*idx]);
 }
 
-static inline compile_result emit_code_cell(compile_ctx *ctx, ir_op_t op) {
-  return emit_add_sub(ctx, MODE_REG_INDIRECT, op);
+static inline compile_result emit_code_cell(compile_ctx *ctx, ir_ctx *ctx_ir,
+                                            size_t *idx) {
+  return emit_add_sub(ctx, MODE_REG_INDIRECT, ctx_ir->data[*idx]);
 }
 
 #define ctx_patch_code(ctx, idx, ...)                                          \
   vec_insertarr(ctx, idx, ((uint8_t[]){__VA_ARGS__}),                          \
                 macro_count_args(__VA_ARGS__))
 
-static inline compile_result emit_code_loop(compile_ctx *ctx, ir_op_t op) {
+static inline compile_result emit_code_loop(compile_ctx *ctx, ir_ctx *ctx_ir,
+                                            size_t *idx) {
+  ir_op_t op = ctx_ir->data[*idx];
   if (op.arg > INT32_MAX || op.arg < INT32_MIN) {
     return COMPILE_OPERAND_SIZE;
-  }
-
-  /* i'm not smart enough to think of another way that still allows our code
-   * to contiguous in memory, so patching will have to do.  */
-  if (op.kind == IR_OP_LOOP) {
-    /* cmp (%SP_REG), $0 */
-    ctx_push_code(ctx, 0x80, mod_rm(MODE_REG_INDIRECT, 0x7, SP_REG), 0x0);
-    ir_patch_t *next = dmt_calloc(1, sizeof(ir_patch_t));
-    *next = (ir_patch_t){.addr = ctx->length, .prev = ctx->patch};
-    ctx->patch = next;
-    return COMPILE_OK;
   }
 
   /* cmp (%SP_REG), $0 */
   ctx_push_code(ctx, 0x80, mod_rm(MODE_REG_INDIRECT, 0x7, SP_REG), 0x0);
 
-  int64_t delta = ctx->length - ctx->patch->addr;
-
-  /* check if we can do a short jump */
-  if (delta - 2 <= INT8_MAX) {
-    /* kind of a ugly hack but we want to skip over the code we just emitted
-     */
-    /* jne imm8 */
-    ctx_push_code(ctx, 0x75, -(int8_t)(delta + 2));
-    delta = ctx->length - ctx->patch->addr;
-    /* je imm8 */
-    ctx_patch_code(ctx, ctx->patch->addr, 0x74, (int8_t)(delta));
-  } else {
-    /* we must do a near jump */
-    /* jne imm16/imm32 */
-    ctx_push_code(ctx, 0x0F, 0x85); /* 0x0F is a prefix byte */
-    int32_t arg = -(int32_t)(delta + 6);
-    vec_push_as_bytes(ctx, &arg);
-
-    /* je imm16/imm32 */
-    /* ctx_push_code(ctx, 0x0F, 0x84); /\* 0x0F is a prefix byte *\/ */
-    ctx_patch_code(ctx, ctx->patch->addr, 0x0F, 0x84);
-    arg = (int32_t)(delta + 6);
-    vec_insert_as_bytes(ctx, ctx->patch->addr + 2, &arg);
+  if (op.kind == LOOP_END) {
+    return COMPILE_OK;
   }
 
-  ir_patch_t *tmp = ctx->patch->prev;
-  dmt_free(ctx->patch);
-  ctx->patch = tmp;
+  /* if (ctx_ir->data[op.arg].kind != LOOP_END || */
+  /*     ctx_ir->data[op.arg].arg != (int_t)*idx) { */
+  if (ctx_ir->data[op.arg].kind != LOOP_END) {
+    char buf[1024] = {0};
+    printf("[%ld] %s\n", *idx, ir_fmt_op(op, buf));
+    printf("[%ld] %s\n", op.arg - 1, ir_fmt_op(ctx_ir->data[op.arg - 1], buf));
+    printf("error 1\n");
+    return COMPILE_MALFORMED_LOOP;
+  }
 
+  /* encode loop body */
+  compile_ctx loop_code = {0};
+  vec_reserve(&loop_code, op.arg - *idx);
+  if (ir_ctx_compile(&loop_code, ctx_ir) != 0) {
+    printf("bad things\n");
+    return COMPILE_MALFORMED_LOOP;
+  }
+
+  /* plus 6 for the largest possible jumps (backwards and forwards) */
+  /* i don't like these hardcoded magic numbers either. */
+  if (loop_code.length + 12 > INT32_MAX)
+    return COMPILE_MALFORMED_LOOP;
+
+  /* rather than worrying about unhygenic macros, i store the value here */
+  uint_t loop_size = loop_code.length;
+
+  /* check if we can do a short jump (accounting for 2 byte jump) */
+  if (loop_code.length + 2 <= INT8_MAX) {
+    /* jne imm8 (end of loop) */
+    ctx_push_code(&loop_code, 0x75, -(int8_t)(loop_size));
+    /* je imm8 (start of loop) */
+    ctx_push_code(ctx, 0x74, (int8_t)(loop_code.length));
+  } else {
+    /* check if we can still do a short jump backwards */
+    if (loop_size <= INT8_MAX) {
+      /* jne imm8 (end of loop) */
+      ctx_push_code(&loop_code, 0x75, -(int8_t)(loop_size));
+    } else {
+      /* jne imm16/imm32 */
+      ctx_push_code(&loop_code, 0x0F, 0x85); /* 0x0F is a prefix byte */
+      int32_t arg = -(int32_t)loop_size;
+      vec_push_as_bytes(&loop_code, &arg);
+    }
+    /* je imm16/imm32 (start of loop) */
+    ctx_push_code(ctx, 0x0F, 0x84); /* 0x0F is a prefix byte */
+    int arg = (int32_t)(loop_code.length);
+    vec_push_as_bytes(ctx, &arg);
+  }
+
+  /* copy the loop body to the main buffer */
+  vec_extend(ctx, &loop_code);
+
+  /* jump to the end of the loop since we compiled its body */
+  *idx = op.arg;
   return COMPILE_OK;
 }
 static const reg_t syscall_arg_reg[] = {REG_EBX, REG_ECX, REG_EDX,
@@ -146,7 +183,9 @@ static const reg_t syscall_arg_reg[] = {REG_EBX, REG_ECX, REG_EDX,
   ctx_push_code(ctx, 0x89, mod_rm(MODE_REG_DIRECT, reg, syscall_arg_reg[n]))
 
 /* yeah this is kinda broken. it need to mov from one reg to another */
-static inline compile_result emit_code_write(compile_ctx *ctx, ir_op_t op) {
+static inline compile_result emit_code_write(compile_ctx *ctx, ir_ctx *ctx_ir,
+                                             size_t *idx) {
+  ir_op_t op = ctx_ir->data[*idx];
   if (op.arg > INT32_MAX || op.arg < INT32_MIN) {
     return COMPILE_OPERAND_SIZE;
   }
@@ -176,7 +215,9 @@ static inline compile_result emit_code_write(compile_ctx *ctx, ir_op_t op) {
   return COMPILE_OK;
 }
 
-static inline compile_result emit_code_read(compile_ctx *ctx, ir_op_t op) {
+static inline compile_result emit_code_read(compile_ctx *ctx, ir_ctx *ctx_ir,
+                                            size_t *idx) {
+  ir_op_t op = ctx_ir->data[*idx];
   if (op.arg > INT32_MAX || op.arg < INT32_MIN) {
     return COMPILE_OPERAND_SIZE;
   }
@@ -198,13 +239,17 @@ static inline compile_result emit_code_read(compile_ctx *ctx, ir_op_t op) {
   return COMPILE_OK;
 }
 
-static inline compile_result emit_code_trap(compile_ctx *ctx, ir_op_t op) {
-  unused(op);
+static inline compile_result emit_code_trap(compile_ctx *ctx, ir_ctx *ctx_ir,
+                                            size_t *idx) {
+  unused(ctx_ir);
+  unused(idx);
   ctx_push_code(ctx, 0xcd, 0x03);
   return COMPILE_OK;
 }
 
-static inline compile_result emit_code_exit(compile_ctx *ctx, ir_op_t op) {
+static inline compile_result emit_code_exit(compile_ctx *ctx, ir_ctx *ctx_ir,
+                                            size_t *idx) {
+  ir_op_t op = ctx_ir->data[*idx];
   if (op.arg > INT32_MAX || op.arg < INT32_MIN) {
     return COMPILE_OPERAND_SIZE;
   }
@@ -217,28 +262,28 @@ static inline compile_result emit_code_exit(compile_ctx *ctx, ir_op_t op) {
   return COMPILE_OK;
 }
 
-size_t ir_ctx_compile(ir_ctx *ir_ctx, compile_ctx *ctx) {
-  static compile_result (*code_fn[])(compile_ctx *, ir_op_t) = {
+size_t ir_ctx_compile(compile_ctx *ctx, ir_ctx *ctx_ir) {
+  static compile_result (*code_fn[])(compile_ctx *, ir_ctx *, size_t *) = {
       [IR_OP_TAPE] = emit_code_tape,  [IR_OP_CELL] = emit_code_cell,
       [IR_OP_LOOP] = emit_code_loop,  [IR_OP_WRITE] = emit_code_write,
       [IR_OP_READ] = emit_code_read,  [IR_OP_SET] = emit_code_trap,
       [IR_OP_PATCH] = emit_code_trap, [IR_OP_MAX] = emit_code_exit,
   };
   /* patch code to have a halt instruction */
-  vec_push(ir_ctx, ((ir_op_t){.kind = IR_OP_MAX, .arg = 0}));
+  vec_push(ctx_ir, ((ir_op_t){.kind = IR_OP_MAX, .arg = 0}));
 
   char err_buf[500];
   compile_result err = COMPILE_OK;
-  vec_for(ir_ctx, opcode, i) {
+
+  for (size_t i = 0; i < ctx_ir->length; i++) {
     /* remove LOOP flag */
-    if ((err = code_fn[iter.opcode.kind & IR_OP_MAX](ctx, iter.opcode) !=
+    if ((err = code_fn[ctx_ir->data[i].kind & IR_OP_MAX](ctx, ctx_ir, &i) !=
                COMPILE_OK)) {
-      ir_fmt_op(iter.opcode, err_buf);
+      ir_fmt_op(ctx_ir->data[i], err_buf);
       fprintf(stderr, "compiler error: [%s] %s\n", err_buf,
               compile_result_str[err]);
       return -1;
     }
   }
-
   return 0;
 }

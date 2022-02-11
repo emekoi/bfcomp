@@ -28,11 +28,11 @@ size_t ir_interpret(ir_ctx *ir_ctx, interpret_ctx_t *ctx) {
   dispatch(ir_op_tape, { sp = (sp + opcode(ip).arg) % ctx->capacity; });
   dispatch(ir_op_cell, { ctx->data[sp] += opcode(ip).arg; });
   dispatch(ir_op_loop, {
-    int64_t delta = opcode(ip).arg;
+    int64_t target = opcode(ip).arg;
     if (!ctx->data[sp] && opcode(ip).kind == (ir_op_kind_t)LOOP_START) {
-      ip += delta;
+      ip = target;
     } else if (ctx->data[sp] && opcode(ip).kind == (ir_op_kind_t)LOOP_END) {
-      ip += delta;
+      ip = target;
     }
   });
   dispatch(ir_op_write, {

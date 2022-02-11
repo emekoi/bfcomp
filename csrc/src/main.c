@@ -94,7 +94,7 @@ void write_elf_file(ir_ctx *ir_ctx, FILE *fp) {
   /* preload SP_REG with the location of .bss that we will patch later */
   ctx_push_code(text, 0xb8 + SP_REG);
   vec_push_as_bytes(text, &text->header.p_vaddr);
-  ir_ctx_compile(ir_ctx, (compile_ctx *)text);
+  ir_ctx_compile((compile_ctx *)text, ir_ctx);
 
   program_t *bss = gen_program_header(
       &elf_ctx, ".bss",

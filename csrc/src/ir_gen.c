@@ -53,11 +53,10 @@ size_t ir_ctx_parse(ir_ctx *ctx, const char *src) {
     }
     case ']': {
       if (ctx->patch) {
-        int64_t delta = ctx->length - ctx->patch->addr;
         ctx->data[ctx->patch->addr] =
-            (ir_op_t){.kind = (ir_op_kind_t)LOOP_START, .arg = delta};
-        vec_push(ctx,
-                 ((ir_op_t){.kind = (ir_op_kind_t)LOOP_END, .arg = -delta}));
+            (ir_op_t){.kind = (ir_op_kind_t)LOOP_START, .arg = ctx->length};
+        vec_push(ctx, ((ir_op_t){.kind = (ir_op_kind_t)LOOP_END,
+                                 .arg = ctx->patch->addr}));
         ir_patch_t *tmp = ctx->patch->prev;
         dmt_free(ctx->patch);
         ctx->patch = tmp;
