@@ -11,6 +11,7 @@ typedef struct {
 
 typedef enum {
   COMPILE_OPERAND_SIZE,
+  COMPILE_MALFORMED_LOOP,
   COMPILE_OK,
 } compile_result;
 
@@ -52,4 +53,4 @@ typedef enum {
 #define ctx_push_code(ctx, ...)                                                \
   vec_pusharr(ctx, ((uint8_t[]){__VA_ARGS__}), macro_count_args(__VA_ARGS__))
 
-size_t ir_ctx_compile(ir_ctx *ir_ctx, compile_ctx *ctx);
+size_t ir_ctx_compile(compile_ctx *ctx, ir_ctx *ctx_ir);
