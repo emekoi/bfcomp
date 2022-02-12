@@ -8,20 +8,15 @@
 #define unused(x) ((void)x)
 
 typedef enum {
-  IR_OP_TAPE = 0x0,  /* > | < */
-  IR_OP_CELL = 0x1,  /* + | - */
-  IR_OP_LOOP = 0x2,  /* [ir_op_t] */
-  IR_OP_WRITE = 0x3, /* , */
-  IR_OP_READ = 0x4,  /* . */
-  IR_OP_SET = 0x5,   /* for statically determined expressions */
-  IR_OP_PATCH = 0x6, /* used to mark that this opcode must be patched */
+  IR_OP_TAPE = 0x0,        /* > | < */
+  IR_OP_CELL = 0x1,        /* + | - */
+  IR_OP_LOOP_START = 0x2,  /* [ */
+  IR_OP_LOOP_END = 0x3,    /* ] */ 
+  IR_OP_WRITE = 0x4,       /* , */
+  IR_OP_READ = 0x5,        /* . */
+  IR_OP_SET = 0x6,         /* for statically determined expressions */
   IR_OP_MAX = 0x7,
 } ir_op_kind_t;
-
-typedef enum {
-  LOOP_START = IR_OP_LOOP,
-  LOOP_END = IR_OP_LOOP | (0x1L << (8 * sizeof(ir_op_kind_t) - 1))
-} ir_op_flag;
 
 typedef struct {
   ir_op_kind_t kind;

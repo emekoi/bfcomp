@@ -34,29 +34,57 @@ size_t ir_ctx_parse(ir_ctx *ctx, const char *src) {
       push_op(IR_OP_READ, count);
     case '.':
       push_op(IR_OP_WRITE, count);
-    case '+':
+    case '+': {
+      if (ctx->length > 0 && vec_last(ctx).kind == IR_OP_CELL) {
+        vec_last(ctx).arg += count;
+        /* if (vec_last(ctx).arg == 0) */
+        /*   unused(vec_pop(ctx)); */
+        break;
+      }
       push_op(IR_OP_CELL, count);
-    case '-':
+    }
+    case '-': {
+      if (ctx->length > 0 && vec_last(ctx).kind == IR_OP_CELL) {
+        vec_last(ctx).arg -= count;
+        /* if (vec_last(ctx).arg == 0) */
+        /*   unused(vec_pop(ctx)); */
+        break;
+      }
       push_op(IR_OP_CELL, -count);
-    case '>':
+    }
+    case '>': {
+      if (ctx->length > 0 && vec_last(ctx).kind == IR_OP_TAPE) {
+        vec_last(ctx).arg += count;
+        /* if (vec_last(ctx).arg == 0) */
+        /*   unused(vec_pop(ctx)); */
+        break;
+      }
       push_op(IR_OP_TAPE, count);
-    case '<':
+    }
+    case '<': {
+      if (ctx->length > 0 && vec_last(ctx).kind == IR_OP_TAPE) {
+        vec_last(ctx).arg -= count;
+        /* if (vec_last(ctx).arg == 0) */
+        /*   unused(vec_pop(ctx)); */
+        break;
+      }
       push_op(IR_OP_TAPE, -count);
+    }
 #undef push_op
     case '[': {
       ir_patch_t *next = dmt_calloc(1, sizeof(ir_patch_t));
       *next = (ir_patch_t){.addr = ctx->length, .prev = ctx->patch};
       ctx->patch = next;
-      vec_push(ctx, ((ir_op_t){.kind = IR_OP_PATCH, .arg = 0}));
+      vec_push(ctx, ((ir_op_t){.kind = IR_OP_LOOP_START, .arg = 0}));
       ptr++;
       continue;
     }
     case ']': {
       if (ctx->patch) {
+        int64_t delta = ctx->length - ctx->patch->addr;
         ctx->data[ctx->patch->addr] =
-            (ir_op_t){.kind = (ir_op_kind_t)LOOP_START, .arg = ctx->length};
-        vec_push(ctx, ((ir_op_t){.kind = (ir_op_kind_t)LOOP_END,
-                                 .arg = ctx->patch->addr}));
+            (ir_op_t){.kind = IR_OP_LOOP_START, .arg = delta};
+        vec_push(ctx, ((ir_op_t){.kind = IR_OP_LOOP_END, .arg = -delta}));
         ir_patch_t *tmp = ctx->patch->prev;
         dmt_free(ctx->patch);
         ctx->patch = tmp;
@@ -103,12 +131,11 @@ void ir_ctx_dump_bf(ir_ctx *ctx) {
       }
       break;
     }
-    case IR_OP_LOOP:
-      if (opcode.kind == (ir_op_kind_t)LOOP_END) {
-        putchar(']');
-      } else {
-        putchar('[');
-      }
+    case IR_OP_LOOP_START:
+      putchar('[');
+      break;
+    case IR_OP_LOOP_END:
+      putchar(']');
       break;
     default:
       putcc('#', opcode.arg);
@@ -139,10 +166,10 @@ const char *ir_fmt_op(ir_op_t opcode, char *buf) {
     written = sprintf(buf, "%s $tape %ld", add_sub[opcode.arg < 0],
                       abs_table[opcode.arg < 0]);
     break;
-  case IR_OP_LOOP:
-    written =
-        sprintf(buf, "%s %ld", jmp_table[opcode.kind == (ir_op_kind_t)LOOP_END],
-                opcode.arg);
+  case IR_OP_LOOP_START:
+  case IR_OP_LOOP_END:
+    written = sprintf(buf, "%s %ld", jmp_table[opcode.kind == IR_OP_LOOP_END],
+                      opcode.arg);
     break;
   case IR_OP_MAX:
     written = sprintf(buf, "halt");

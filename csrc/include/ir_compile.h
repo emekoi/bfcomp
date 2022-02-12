@@ -32,6 +32,7 @@ typedef enum {
   REG_EDI = 0x07, /* used as sp */
 } reg_t;
 
+/* 32 bit linux syscalls */
 typedef enum {
   SYS_EXIT = 0x01,
   SYS_READ = 0x03,
