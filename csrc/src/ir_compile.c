@@ -5,20 +5,6 @@
 #include <string.h>
 #include <unistd.h>
 
-/* utilize recursion to lower loops.
- * when we hit a loop, write the prelude slice the remaining data, then encode
- * the body, then encode the epilogue */
-
-/* we will be copying the technique llvm uses of linked list of arrays. but with
- * a twist: since the analysis we have to do is fairlt simply we can simply have
- * a separate array for the loops body and links to the code before and after it
- * (code -> loop -> code). we can then encode the loop body and worry about
- * relaxation later. */
-
-/* or we could go with the recursive approach and merely allocate a new array,
- * pass it to the recursive call, then use its size to set up prologue and
- * epilogue. */
-
 static const char *compile_result_str[] = {
     [COMPILE_OPERAND_SIZE] = "operand size too big",
     [COMPILE_MALFORMED_LOOP] = "malformed loop",
@@ -54,14 +40,14 @@ static inline compile_result emit_add_sub(compile_ctx *ctx, mod_rm_mode mode,
     if (mode == MODE_REG_DIRECT)
       ctx_push_code(ctx, 0x40 + SP_REG);
     else
-      ctx_push_code(ctx, 0xFF, mod_rm(mode, 0, SP_REG));
+      ctx_push_code(ctx, 0xFE, mod_rm(mode, 0, SP_REG));
     break;
   case -1:
     /* dec %SP_REG */
     if (mode == MODE_REG_DIRECT)
       ctx_push_code(ctx, 0x48 + SP_REG);
     else
-      ctx_push_code(ctx, 0xFF, mod_rm(mode, 1, SP_REG));
+      ctx_push_code(ctx, 0xFE, mod_rm(mode, 1, SP_REG));
     break;
   default:
     /* for indirect adressing (the register contains the memory address),
@@ -75,7 +61,6 @@ static inline compile_result emit_add_sub(compile_ctx *ctx, mod_rm_mode mode,
         /* op.arg &= 0xff; */
         if (op.arg <= INT8_MAX) {
           /* add (%SP_REG:8), imm8 */
-          printf("small add: %d\n", op.arg);
           ctx_push_code(ctx, 0x80, mod_rm(mode, 0, SP_REG), (int8_t)op.arg);
         } else {
           /* to prevent an overflow from happening, we load the value we want
@@ -136,6 +121,7 @@ static inline compile_result emit_add_sub(compile_ctx *ctx, mod_rm_mode mode,
     }
   }
 
+  /* TODO: check the tape pointer is legal after a move */
 #if 0
   /* pop %eax: pop bss location from stack into eax */
   ctx_push_code(ctx, 0x8F, mod_rm(MODE_REG_DIRECT, 0, REG_EAX));
