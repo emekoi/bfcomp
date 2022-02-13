@@ -25,12 +25,12 @@ static const char *compile_result_str[] = {
     [COMPILE_OK] = "ok",
 };
 
-#if 0
 static const char *reg_names[] = {
     [REG_EAX] = "eax", [REG_ECX] = "ecx", [REG_EDX] = "edx", [REG_EBX] = "ebx",
     [REG_ESP] = "esp", [REG_EBP] = "ebp", [REG_ESI] = "esi", [REG_EDI] = "edi",
 };
 
+#if 0
 static const char *mod_rm_names[] = {
     [MODE_REG_INDIRECT] = "indirect",
     [MODE_SIB_1] = "sib_1",
@@ -64,27 +64,51 @@ static inline compile_result emit_add_sub(compile_ctx *ctx, mod_rm_mode mode,
     break;
   default:
     if (op.arg > 0) {
-      if (op.arg <= 0xFF) {
+      if (op.arg <= INT8_MAX) {
         /* add %SP_REG, imm8 */
-        ctx_push_code(ctx, 0x83, mod_rm(mode, 0, SP_REG), (uint8_t)op.arg);
+        ctx_push_code(ctx, 0x83, mod_rm(mode, 0, SP_REG), (int8_t)op.arg);
       } else {
         /* add %SP_REG, imm16/imm32 */
-        uint32_t arg = (uint32_t)op.arg;
+        int32_t arg = (int32_t)op.arg;
         ctx_push_code(ctx, 0x81, mod_rm(mode, 0, SP_REG));
         vec_push_as_bytes(ctx, &arg);
       }
     } else {
-      if (op.arg <= 0xFF) {
+      /* we cannot `sub 128` because 128 is to big to fit as a s8 operand.
+       * we *could* `add -128` which would leave the flags in a different state,
+       * since we don't use them anyways. however, for simplicity, i will simply
+       * just promote them to "large" subtractions */
+      if (-op.arg <= INT8_MAX) {
         /* sub %SP_REG, imm8 */
-        ctx_push_code(ctx, 0x83, mod_rm(mode, 5, SP_REG), (uint8_t)(-op.arg));
+        ctx_push_code(ctx, 0x83, mod_rm(mode, 5, SP_REG), (int8_t)(-op.arg));
       } else {
-        uint32_t arg = -op.arg;
+        int32_t arg = -op.arg;
         /* sub %SP_REG, imm16/imm32 */
         ctx_push_code(ctx, 0x81, mod_rm(mode, 5, SP_REG));
         vec_push_as_bytes(ctx, &arg);
       }
     }
   }
+
+#if 0
+  /* pop %eax: pop bss location from stack into eax */
+  ctx_push_code(ctx, 0x8F, mod_rm(MODE_REG_DIRECT, 0, REG_EAX));
+
+  if (sp >= ctx->capacity) {
+      sp -= ctx->capacity;
+    } else if (sp < 0) {
+      sp += ctx->capacity;
+    }
+
+  if (op.arg > 0) {
+    /* check for tape overflow */
+  } else {
+    /* check for tape underflow */
+  }
+
+  /* push %eax */
+  ctx_push_code(ctx, 0xFF, mod_rm(MODE_REG_DIRECT, 6, REG_EAX));
+#endif
   return COMPILE_OK;
 }
 
@@ -142,7 +166,7 @@ static inline compile_result emit_code_loop_end(compile_ctx *ctx, ir_ctx *ir,
   } else {
     /* jne imm16/imm32 */
     ctx_push_code(ctx, 0x0F, 0x85); /* 0x0F is a prefix byte */
-    int32_t arg = -(int32_t)(offset);
+    int32_t arg = (int32_t)(offset);
     /* jumps are relative to end of instruction,
      * so we must account for the size of the adress itself. */
     arg -= sizeof(arg);
@@ -172,6 +196,8 @@ static inline compile_result emit_code_write(compile_ctx *ctx, ir_ctx *ctx_ir,
     return COMPILE_OPERAND_SIZE;
   }
 
+  /* the loop is here because the syscall clobbers the registers
+   * it uses for its arguments with its return value */
   for (int64_t i = 0; i < op.arg; i++) {
     int32_t fd = STDOUT_FILENO;
     uint8_t argc = 0;
@@ -236,6 +262,9 @@ static inline compile_result emit_code_exit(compile_ctx *ctx, ir_ctx *ctx_ir,
     return COMPILE_OPERAND_SIZE;
   }
 
+  /* pop %eax: pop bss location from stack */
+  ctx_push_code(ctx, 0x8F, mod_rm(MODE_REG_DIRECT, 0, REG_EAX));
+
   /* mov SYS_EXIT, %eax */
   ctx_push_code(ctx, 0xb8 + REG_EAX, SYS_EXIT, 0x0, 0x0, 0x0);
   int32_t arg = op.arg;
@@ -295,8 +324,74 @@ size_t ir_ctx_compile__(compile_ctx *ctx, ir_ctx *ctx_ir, size_t idx) {
   return COMPILE_OK;
 }
 
+static const char *ir_compile_dump_asm(ir_op_t opcode, char *buf) {
+  static const char *jmp_table[2] = {"je", "jne"};
+
+  size_t written = 0;
+  switch (opcode.kind & IR_OP_MAX) {
+  case IR_OP_READ:
+    written = sprintf(buf, "<read>");
+    break;
+  case IR_OP_WRITE:
+    written = sprintf(buf, "<write>");
+    break;
+  case IR_OP_CELL:
+    if (opcode.arg > 0) {
+      if (opcode.arg == 1)
+        written = sprintf(buf, "inc (%s)", reg_names[SP_REG]);
+      else
+        written =
+            sprintf(buf, "addl $%02lx,(%s)", opcode.arg, reg_names[SP_REG]);
+    } else {
+      if (opcode.arg == -1)
+        written = sprintf(buf, "dec (%s)", reg_names[SP_REG]);
+      else
+        written =
+            sprintf(buf, "sub $%02lx,(%s)", -opcode.arg, reg_names[SP_REG]);
+    }
+    break;
+  case IR_OP_TAPE:
+    if (opcode.arg > 0) {
+      if (opcode.arg == 1)
+        written = sprintf(buf, "inc %s", reg_names[SP_REG]);
+      else
+        written = sprintf(buf, "addl $%02lx,%s", opcode.arg, reg_names[SP_REG]);
+    } else {
+      if (opcode.arg == -1)
+        written = sprintf(buf, "dec %s", reg_names[SP_REG]);
+      else
+        written = sprintf(buf, "sub $%02lx,%s", -opcode.arg, reg_names[SP_REG]);
+    }
+    break;
+  case IR_OP_LOOP_START:
+  case IR_OP_LOOP_END:
+    written = sprintf(buf, "%s %ld", jmp_table[opcode.kind == IR_OP_LOOP_END],
+                      opcode.arg);
+    break;
+  case IR_OP_MAX:
+    written = sprintf(buf, "<exit>");
+    break;
+  default:
+    written = sprintf(buf, "invalid * %ld", opcode.arg);
+  }
+  buf[written] = '\0';
+  return buf;
+}
+
 inline size_t ir_ctx_compile(compile_ctx *ctx, ir_ctx *ctx_ir) {
   /* patch code to have a halt instruction */
   vec_push(ctx_ir, ((ir_op_t){.kind = IR_OP_MAX, .arg = 0}));
+
+#if 0
+  char buf[1024] = {0};
+  for (uint64_t i = 0; i < ctx->len; i++) {
+  vec_for(ctx_ir, opcode, i) {
+    printf("[%d] %s\n", iter.i, ir_compile_dump_asm(iter.opcode, buf));
+  }
+#endif
+
+  /* push the location of bss to the stack */
+  /* push %SP_REG */
+  ctx_push_code(ctx, 0xFF, mod_rm(MODE_REG_DIRECT, 6, SP_REG));
   return ir_ctx_compile__(ctx, ctx_ir, 0) == COMPILE_OK;
 }
