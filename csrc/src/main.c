@@ -113,22 +113,23 @@ void write_elf_file(ir_ctx *ir_ctx, FILE *fp) {
 }
 
 int main(int argc, char *argv[]) {
+  FILE *dmt_file = fopen("dmt_dump.txt", "w");
+  defer {
+    dmt_dump(dmt_file);
+    fclose(dmt_file);
+  };
+
   options_t options = {NULL, NULL, 0};
   if (parse_options(&options, argc, argv)) {
     exit(EXIT_FAILURE);
   }
 
   defer {
-    if (options.output_name != NULL)
+    if (options.output_name != NULL) {
       dmt_free(options.output_name);
+    }
     if (options.input_name != NULL)
       dmt_free(options.input_name);
-  };
-
-  FILE *dmt_file = fopen("dmt_dump.txt", "w");
-  defer {
-    dmt_dump(dmt_file);
-    fclose(dmt_file);
   };
 
   char defer_var(auto_dmt_free) *buffer = dmt_calloc(1, BUFLEN + 1);
