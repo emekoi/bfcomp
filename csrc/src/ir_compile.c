@@ -341,6 +341,7 @@ size_t ir_ctx_compile__(compile_ctx *ctx, ir_ctx *ctx_ir, size_t idx) {
         /* skip to end of loop body */
         i += opcode.arg;
       }
+      vec_deinit(&loop_code);
     } else {
       err = code_fn[opcode.kind](ctx, ctx_ir, i);
     }
