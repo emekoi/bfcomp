@@ -16,7 +16,7 @@ size_t ir_interpret(ir_ctx *ir_ctx, interpret_ctx_t *ctx) {
       [IR_OP_MAX] = &&ir_op_halt,
   };
   size_t ip = 0;
-  size_t sp = 0;
+  ssize_t sp = 0;
   char buf[1024] = {0};
 #define opcode(ir_op_ip) ir_ctx->data[ir_op_ip]
 #define dispatch(label, blk)                                                   \
