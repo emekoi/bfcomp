@@ -12,6 +12,7 @@ typedef struct {
 typedef enum {
   COMPILE_OPERAND_SIZE,
   COMPILE_MALFORMED_LOOP,
+  COMPILE_ILLEGAL_STATE,
   COMPILE_OK,
 } compile_result;
 

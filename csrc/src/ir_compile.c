@@ -22,6 +22,7 @@
 static const char *compile_result_str[] = {
     [COMPILE_OPERAND_SIZE] = "operand size too big",
     [COMPILE_MALFORMED_LOOP] = "malformed loop",
+    [COMPILE_ILLEGAL_STATE] = "illegal state",
     [COMPILE_OK] = "ok",
 };
 
@@ -63,30 +64,75 @@ static inline compile_result emit_add_sub(compile_ctx *ctx, mod_rm_mode mode,
       ctx_push_code(ctx, 0xFF, mod_rm(mode, 1, SP_REG));
     break;
   default:
-    if (op.arg > 0) {
-      if (op.arg <= INT8_MAX) {
-        /* add %SP_REG, imm8 */
-        ctx_push_code(ctx, 0x83, mod_rm(mode, 0, SP_REG), (int8_t)op.arg);
+    /* for indirect adressing (the register contains the memory address),
+     * we don't want to use the full 32 bits in an add because then it looks
+     * like our cells our larger than they should be (multiplication loops
+     * overflow into other cells). thus we want to use the r/m8 variants of adds
+     * and subs. */
+    if (mode == MODE_REG_INDIRECT) {
+      if (op.arg > 0) {
+        /* we want wrap around at 0xff so we can perform the modulus here */
+        /* op.arg &= 0xff; */
+        if (op.arg <= INT8_MAX) {
+          /* add (%SP_REG:8), imm8 */
+          printf("small add: %d\n", op.arg);
+          ctx_push_code(ctx, 0x80, mod_rm(mode, 0, SP_REG), (int8_t)op.arg);
+        } else {
+          /* to prevent an overflow from happening, we load the value we want
+           * into %eax, then add %ax to (%SP_REG). this allows us to do addition
+           * with values > 127 */
+
+          /* mov %eax, op.arg */
+          int32_t arg = (int32_t)op.arg;
+          ctx_push_code(ctx, 0xC7, mod_rm(MODE_REG_DIRECT, 0, REG_EAX));
+          vec_push_as_bytes(ctx, &arg);
+
+          /* add (%SP_REG:8), %ax */
+          ctx_push_code(ctx, 0x00, mod_rm(mode, REG_EAX, SP_REG));
+        }
       } else {
-        /* add %SP_REG, imm16/imm32 */
-        int32_t arg = (int32_t)op.arg;
-        ctx_push_code(ctx, 0x81, mod_rm(mode, 0, SP_REG));
-        vec_push_as_bytes(ctx, &arg);
+        /* we cannot `sub 128` because 128 is to big to fit as a s8 operand.
+         * we *could* `add -128` which would leave the flags in a different
+         * state, since we don't use them anyways. however, for simplicity, i
+         * will simply just promote them to "large" subtractions */
+        if (-op.arg <= INT8_MAX) {
+          /* sub (%SP_REG:8), imm8 */
+          ctx_push_code(ctx, 0x80, mod_rm(mode, 5, SP_REG), (int8_t)(-op.arg));
+        } else {
+          int32_t arg = -op.arg;
+
+          /* mov %eax, op.arg */
+          ctx_push_code(ctx, 0xC7, mod_rm(MODE_REG_DIRECT, 0, REG_EAX));
+          vec_push_as_bytes(ctx, &arg);
+
+          /* sub (%SP_REG:8), %ax */
+          ctx_push_code(ctx, 0x28, mod_rm(mode, REG_EAX, SP_REG));
+        }
+      }
+    } else if (mode == MODE_REG_DIRECT) {
+      if (op.arg > 0) {
+        if (op.arg <= INT8_MAX) {
+          /* add %SP_REG:(r16/r32), imm8 */
+          ctx_push_code(ctx, 0x83, mod_rm(mode, 0, SP_REG), (int8_t)op.arg);
+        } else {
+          int32_t arg = (int32_t)op.arg;
+          /* add %SP_REG:(r16/r32), imm16/imm32 */
+          ctx_push_code(ctx, 0x81, mod_rm(mode, 0, SP_REG));
+          vec_push_as_bytes(ctx, &arg);
+        }
+      } else {
+        if (-op.arg <= INT8_MAX) {
+          /* sub %SP_REG:(r16/r32), imm8 */
+          ctx_push_code(ctx, 0x83, mod_rm(mode, 5, SP_REG), (int8_t)(-op.arg));
+        } else {
+          int32_t arg = -op.arg;
+          /* sub %SP_REG:(r16/r32), imm16/imm32 */
+          ctx_push_code(ctx, 0x81, mod_rm(mode, 5, SP_REG));
+          vec_push_as_bytes(ctx, &arg);
+        }
       }
     } else {
-      /* we cannot `sub 128` because 128 is to big to fit as a s8 operand.
-       * we *could* `add -128` which would leave the flags in a different state,
-       * since we don't use them anyways. however, for simplicity, i will simply
-       * just promote them to "large" subtractions */
-      if (-op.arg <= INT8_MAX) {
-        /* sub %SP_REG, imm8 */
-        ctx_push_code(ctx, 0x83, mod_rm(mode, 5, SP_REG), (int8_t)(-op.arg));
-      } else {
-        int32_t arg = -op.arg;
-        /* sub %SP_REG, imm16/imm32 */
-        ctx_push_code(ctx, 0x81, mod_rm(mode, 5, SP_REG));
-        vec_push_as_bytes(ctx, &arg);
-      }
+      return COMPILE_ILLEGAL_STATE;
     }
   }
 
@@ -262,8 +308,11 @@ static inline compile_result emit_code_exit(compile_ctx *ctx, ir_ctx *ctx_ir,
     return COMPILE_OPERAND_SIZE;
   }
 
+  /* well this is illegal in x86_64 */
+#if 0
   /* pop %eax: pop bss location from stack */
   ctx_push_code(ctx, 0x8F, mod_rm(MODE_REG_DIRECT, 0, REG_EAX));
+#endif
 
   /* mov SYS_EXIT, %eax */
   ctx_push_code(ctx, 0xb8 + REG_EAX, SYS_EXIT, 0x0, 0x0, 0x0);
