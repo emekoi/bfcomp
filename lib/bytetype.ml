@@ -32,7 +32,7 @@ module T = struct
   let mk_const s t f =
     (* can we be more succint here? *)
     let t' b i v = t b i v; s in
-    backing (Static s) t' f
+    backing (Static s) t' f [@@inline]
 
   (* smart constructors for iterable types. NOTE: we do not suppotrt arbitralily long iterables OOTB.
        i.e. you would need to write the routines for a stream yourself *)
@@ -71,7 +71,7 @@ module T = struct
 
   let mk_int s t f =
     let t' b i v = t v b i; s in
-    backing (Static s) t' f
+    backing (Static s) t' f [@@inline]
 
   let u8 = Uint8.(mk_int 1 to_bytes_little_endian of_bytes_little_endian)
   let u16_le = Uint16.(mk_int 2 to_bytes_little_endian of_bytes_little_endian)
@@ -146,7 +146,8 @@ module StreamT = struct
     in stream t from
 end
 
-let backed t v = Field (Backed (v, t))
+let field t = Backing t [@@inline]
+let backed t v = Field (Backed (v, t)) [@@inline]
 
 let char = backed T.char
 
@@ -170,6 +171,8 @@ let list t = backed >*< (T.list t << List.length)
 let array t = backed >*< (T.array t << Array.length)
 let string = backed >*< (T.string << String.length)
 
+let padding t n v = backed (T.array t n) (Array.make n v)
+
 let get : type a. a field -> a =
   fun (Backed(b, _)) -> b
 
@@ -181,6 +184,8 @@ let read : type a. Bytes.t -> int -> a backing -> a field = fun b i t ->
 
 let write : type a. Bytes.t -> int -> a field -> int =
   fun b i (Backed(v, t)) -> t.toBytes b i v
+
+let writeAny b i (Field f) = write b i f
 
 let sizeof (Field Backed(v, b)) =
   match b.size with

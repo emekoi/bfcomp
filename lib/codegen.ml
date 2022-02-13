@@ -17,7 +17,7 @@ let int_of_reg = function
 
 type _ op =
   | Reg : reg -> reg op
-  | Mem : 'a op -> 'a op op
+  | Mem : 'a op -> 'a op
   | Imm8 : int8 -> int8 op
   | Uimm8 : uint8 -> uint8 op
   | Imm16 : int16 -> int16 op
@@ -26,6 +26,10 @@ type _ op =
   | Uimm32 : uint32 -> uint32 op
 
 type any_op = Op : _ op -> any_op [@@unboxed]
+
+let reg v = Reg v
+
+let mem op = Mem op
 
 let imm8 v = Imm8 (Int8.of_int v)
 

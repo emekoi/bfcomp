@@ -9,7 +9,7 @@ let rec parse_char s c k =
       | ',' -> More Ir.Read
       | '.' -> More Ir.Write
       (* is this reversing step expensive over time? *)
-      | '[' -> More (Loop (parse_stream s |> List.rev))
+      | '[' -> More (Ir.Loop (parse_stream s |> List.rev))
       | ']' -> End
       | _ -> Skip)
 

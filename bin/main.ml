@@ -23,8 +23,8 @@ let rec show_t = function
 
 let main () =
   (if Array.length Sys.argv > 1 then
-   open_in_bin Sys.argv.(1) |> string_of_in_channel
-  else hello_word)
+     open_in_bin Sys.argv.(1) |> string_of_in_channel
+   else hello_word)
   |> Parser.parse
   |> Ir.Pass.run [ Ir.Pass.contraction; Ir.Pass.dead_code; Ir.Pass.zero_loop ]
   (* |> List.map show_t |> String.concat "" |> print_endline *)

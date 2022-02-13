@@ -18,8 +18,6 @@ depends: [
   "stdint"
 #   "extlib" {build}
 #   "stringext" {build}
-#   "lwt" {build}
-  # "ppx_serf" {build}
 ]
 synopsis: "Build API clients from type definitions"
 description:

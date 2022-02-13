@@ -54,6 +54,7 @@ module StreamT : sig
   val streamUntil : 'a backing -> ('a -> bool) -> 'a t backing
 end
 
+val field : 'a backing -> any_backing
 val backed : 'a backing -> 'a -> any_field
 
 val char : char -> any_field
@@ -78,8 +79,11 @@ val list : 'a backing -> 'a list -> any_field
 val array : 'a backing -> 'a array -> any_field
 val string : string -> any_field
 
+val padding : 'a backing -> int -> 'a -> any_field
+
 val get : 'a field -> 'a
 val set : 'a field -> 'a -> 'a field
 val write : Bytes.t -> int -> 'a field -> int
+val writeAny : Bytes.t -> int -> any_field -> int
 val read : Bytes.t -> int -> 'a backing -> 'a field
 val sizeof : any_field -> int option

@@ -7,7 +7,7 @@ val int_of_reg : reg -> uint8
 
 type _ op =
   | Reg : reg -> reg op
-  | Mem : 'a op -> 'a op op
+  | Mem : 'a op -> 'a op
   | Imm8 : int8 -> int8 op
   | Uimm8 : uint8 -> uint8 op
   | Imm16 : int16 -> int16 op
@@ -15,6 +15,8 @@ type _ op =
   | Imm32 : int32 -> int32 op
   | Uimm32 : uint32 -> uint32 op
 
+val reg : reg -> reg op
+val mem : 'a op -> 'a op
 val imm8 : int -> int8 op
 val uimm8 : int -> uint8 op
 val imm16 : int -> int16 op
