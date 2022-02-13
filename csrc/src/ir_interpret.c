@@ -37,6 +37,8 @@ size_t ir_interpret(ir_ctx *ir_ctx, interpret_ctx_t *ctx) {
     sp += opcode(ip).arg;
     if (sp >= ctx->capacity) {
       sp -= ctx->capacity;
+    } else if (sp < 0) {
+      sp += ctx->capacity;
     }
   });
   dispatch(ir_op_cell, { ctx->data[sp] += opcode(ip).arg; });
