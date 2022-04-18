@@ -1,5 +1,6 @@
 #include "ir_gen.h"
 #include "common.h"
+#include <assert.h>
 #include <string.h>
 
 void ir_ctx_free(ir_ctx *ctx) {
@@ -8,7 +9,7 @@ void ir_ctx_free(ir_ctx *ctx) {
   }
   while (ctx->patch) {
     ir_patch_t *prev = ctx->patch->prev;
-    dmt_free(ctx->patch);
+    free(ctx->patch);
     ctx->patch = prev;
   }
   vec_deinit(ctx);
@@ -72,7 +73,7 @@ size_t ir_ctx_parse(ir_ctx *ctx, const char *src) {
     }
 #undef push_op
     case '[': {
-      ir_patch_t *next = dmt_calloc(1, sizeof(ir_patch_t));
+      ir_patch_t *next = calloc(1, sizeof(ir_patch_t));
       *next = (ir_patch_t){.addr = ctx->length, .prev = ctx->patch};
       ctx->patch = next;
       vec_push(ctx, ((ir_op_t){.kind = IR_OP_LOOP_START, .arg = 0}));
@@ -86,7 +87,7 @@ size_t ir_ctx_parse(ir_ctx *ctx, const char *src) {
             (ir_op_t){.kind = IR_OP_LOOP_START, .arg = delta};
         vec_push(ctx, ((ir_op_t){.kind = IR_OP_LOOP_END, .arg = -delta}));
         ir_patch_t *tmp = ctx->patch->prev;
-        dmt_free(ctx->patch);
+        free(ctx->patch);
         ctx->patch = tmp;
         ptr++;
         continue;
@@ -185,6 +186,6 @@ void ir_ctx_dump_ir(ir_ctx *ctx) {
   char buf[1024] = {0};
   /* for (uint64_t i = 0; i < ctx->len; i++) { */
   vec_for(ctx, opcode, i) {
-    printf("[%d] %s\n", iter.i, ir_fmt_op(iter.opcode, buf));
+    printf("[%zu] %s\n", iter.i, ir_fmt_op(iter.opcode, buf));
   }
 }

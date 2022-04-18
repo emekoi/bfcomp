@@ -1,5 +1,5 @@
 include_dir=include
-c_flags=-g
+c_flags=-g -O3
 
 .cache/%.o: src/%.c
 	@test -d $(@D) || mkdir -p $(@D)

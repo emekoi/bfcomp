@@ -59,11 +59,6 @@ static int32_t get_aux_val(struct start_info info, int32_t type) {
 }
 #endif
 
-void auto_dmt_free(void *data) {
-  if (*(void **)data)
-    dmt_free(*(void **)data);
-}
-
 void make_exe(FILE *fp) {
   int fd = fileno(fp);
   struct stat statbuf = {0};
@@ -113,12 +108,6 @@ void write_elf_file(ir_ctx *ir_ctx, FILE *fp) {
 }
 
 int main(int argc, char *argv[]) {
-  FILE *dmt_file = fopen("dmt_dump.txt", "w");
-  defer {
-    dmt_dump(dmt_file);
-    fclose(dmt_file);
-  };
-
   options_t options = {NULL, NULL, 0};
   if (parse_options(&options, argc, argv)) {
     exit(EXIT_FAILURE);
@@ -126,13 +115,13 @@ int main(int argc, char *argv[]) {
 
   defer {
     if (options.output_name != NULL) {
-      dmt_free(options.output_name);
+      free(options.output_name);
     }
     if (options.input_name != NULL)
-      dmt_free(options.input_name);
+      free(options.input_name);
   };
 
-  char defer_var(auto_dmt_free) *buffer = dmt_calloc(1, BUFLEN + 1);
+  char defer_var(auto_free) *buffer = calloc(1, BUFLEN + 1);
   ir_ctx defer_var(ir_ctx_free) ir_ctx = {0};
   vec_reserve(&ir_ctx, BUFLEN);
 
